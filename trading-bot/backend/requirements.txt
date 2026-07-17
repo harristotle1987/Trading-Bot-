@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+psycopg2-binary
+pandas
+pandas-ta
+python-telegram-bot
+python-dotenv
+httpx
+websockets
+pydantic-settings
+apscheduler

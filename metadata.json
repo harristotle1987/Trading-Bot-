@@ -1,0 +1,6 @@
+{
+  "name": "Trading Bot System",
+  "description": "Private CRM and Trading Bot System with an Obsidian UI style.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

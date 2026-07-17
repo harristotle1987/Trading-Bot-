@@ -1,0 +1,21 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-base: #0B0E13;
+    --bg-panel: #12161D;
+    --bg-panel-raised: #181D26;
+    --border-hairline: #232833;
+    --text-primary: #E6E9EF;
+    --text-secondary: #838C9C;
+    --accent-signal: #3DDBD9;
+    --positive: #2FBF71;
+    --negative: #E5484D;
+    --warning: #E8A33D;
+  }
+
+  body {
+    @apply bg-[#0B0E13] text-[#E6E9EF] antialiased selection:bg-[#3DDBD9]/30;
+    font-family: "Inter", sans-serif;
+  }
+}
