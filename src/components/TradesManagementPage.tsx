@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 interface Position {
   id: string;
@@ -25,6 +26,10 @@ export default function TradesManagementPage() {
   const fetchPositions = async () => {
     try {
       const res = await fetch("/api/trades/active");
+      if (!res.ok) {
+        console.error("API Error:", res.status, await res.text());
+        return;
+      }
       const data = await res.json();
       setPositions(data || []);
     } catch (err) {
@@ -35,17 +40,21 @@ export default function TradesManagementPage() {
   };
 
   const handleClosePosition = async (id: string, mode: "DEMO" | "LIVE") => {
+    console.log("Attempting to close position:", id, mode);
     if (!confirm(`Are you sure you want to close position ${id}?`)) return;
     try {
       const res = await fetch("/api/trades/close", {
-        method: "POST",
+        method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ position_id: id, account_mode: mode }),
       });
+      console.log("Close response status:", res.status);
       const data = await res.json();
-      alert(`[${mode}] Trade Closed! Realized PnL: $${data.realized_pnl}`);
+      console.log("Close response data:", data);
+      toast.success(`[${mode}] Trade Closed! Realized PnL: $${data.realized_pnl}`);
       fetchPositions(); // Refresh trades list instantly
-    } catch (err) {
+    } catch (err: any) {
+      toast.error(`Failed to close position: ${err.message}`);
       console.error("Failed to close position:", err);
     }
   };
@@ -84,7 +93,10 @@ export default function TradesManagementPage() {
             {["ALL", "DEMO", "LIVE"].map((mode) => (
               <button
                 key={mode}
-                onClick={() => setFilterMode(mode as any)}
+                onClick={() => {
+                  setFilterMode(mode as any);
+                  toast(`Filter set to ${mode}`);
+                }}
                 className={`px-4 py-1.5 text-xs font-bold font-mono rounded transition-colors ${
                   filterMode === mode ? "bg-[#3DDBD9] text-[#0B0C10] shadow-[0_0_10px_rgba(61,219,217,0.3)]" : "text-[#838C9C] hover:text-white hover:bg-[#1F2833]"
                 }`}

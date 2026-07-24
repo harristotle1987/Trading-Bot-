@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import OpportunityRadar from './OpportunityRadar';
 import AgentInsightPanel from './AgentInsightPanel';
 
@@ -40,7 +41,10 @@ export default function AgentControlPanel() {
       const res = await fetch(endpoint, { method: 'POST' });
       const data = await res.json();
       setStatus(data);
-    } catch (err) {
+      if (res.ok) toast.success(`Action executed successfully! Status: ${data.status}`);
+      else toast.error(`Failed to execute action: ${data.error || res.status}`);
+    } catch (err: any) {
+      toast.error(`Error executing action: ${err.message}`);
       console.error(`Failed to execute ${endpoint}`, err);
     }
     setLoading(false);

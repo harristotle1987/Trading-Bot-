@@ -7,7 +7,7 @@ async def get_orders(session: AsyncSession):
     return result.scalars().all()
 
 async def get_positions(session: AsyncSession):
-    result = await session.execute(select(Position).order_by(Position.created_at.desc()))
+    result = await session.execute(select(Position).order_by(Position.opened_at.desc()))
     return result.scalars().all()
 
 async def create_order(session: AsyncSession, order_data: dict):

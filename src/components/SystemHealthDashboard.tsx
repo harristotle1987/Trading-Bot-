@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function SystemHealthDashboard() {
   const [health, setHealth] = useState<any>(null);
@@ -31,13 +32,19 @@ export default function SystemHealthDashboard() {
   const toggleMaintenance = async () => {
     setLoading(true);
     try {
-      await fetch('/api/system/maintenance-mode', {
+      const res = await fetch('/api/system/maintenance-mode', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: !maintenanceMode })
       });
-      setMaintenanceMode(!maintenanceMode);
-    } catch (err) {
+      if (res.ok) {
+        setMaintenanceMode(!maintenanceMode);
+        toast.success(`Maintenance mode ${!maintenanceMode ? 'enabled' : 'disabled'}`);
+      } else {
+        toast.error("Failed to toggle maintenance mode");
+      }
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`);
       console.error("Failed to toggle maintenance mode", err);
     }
     setLoading(false);

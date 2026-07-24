@@ -22,7 +22,7 @@ class Order(Base):
 class Position(Base):
     __tablename__ = "positions"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(String(36), primary_key=True, index=True)
     account_mode = Column(String(10), default="DEMO") # DEMO, LIVE
     broker = Column(String(20), default="CTRADER")
     symbol = Column(String(50), nullable=False, index=True)
@@ -37,6 +37,5 @@ class Position(Base):
     ai_confidence_score = Column(Float, nullable=True)
     ai_reasoning = Column(String, nullable=True)
     status = Column(String(20), default="OPEN") # OPEN, CLOSED, CANCELLED
-    timestamp = Column(DateTime, default=datetime.utcnow)
     opened_at = Column(DateTime, default=datetime.utcnow)
     closed_at = Column(DateTime, nullable=True)

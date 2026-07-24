@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { createChart, ColorType, IChartApi, ISeriesApi, LineSeries } from 'lightweight-charts';
 import { TRADABLE_PAIRS } from "../App";
 
@@ -23,6 +24,7 @@ export default function BacktestWorkspace() {
 
   const handleRun = async () => {
     setLoading(true);
+    toast("Starting backtest...");
     try {
       const res = await fetch('/api/backtest/run', {
         method: 'POST',
@@ -40,10 +42,14 @@ export default function BacktestWorkspace() {
         })
       });
       const data = await res.json();
-      if (data.report) {
+      if (res.ok && data.report) {
         setReport(data.report);
+        toast.success("Backtest completed successfully!");
+      } else {
+        toast.error(`Backtest failed: ${data.error || res.status}`);
       }
-    } catch (err) {
+    } catch (err: any) {
+      toast.error(`Error running backtest: ${err.message}`);
       console.error(err);
     }
     setLoading(false);

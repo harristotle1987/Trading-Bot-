@@ -1,10 +1,59 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
+
+function ConfirmationModal({ 
+  isOpen, 
+  title, 
+  message, 
+  onConfirm, 
+  onCancel 
+}: { 
+  isOpen: boolean; 
+  title: string; 
+  message: string; 
+  onConfirm: () => void; 
+  onCancel: () => void; 
+}) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+      <div className="bg-[#12161D] border border-[#232833] rounded-lg shadow-2xl max-w-md w-full font-mono overflow-hidden">
+        <div className="p-4 border-b border-[#232833] flex justify-between items-center bg-[#0B0E13]">
+          <h3 className="text-lg font-bold text-white tracking-widest uppercase">{title}</h3>
+        </div>
+        <div className="p-6 text-[#C5C6C7]">
+          <p>{message}</p>
+        </div>
+        <div className="p-4 border-t border-[#232833] flex gap-3 justify-end bg-[#0B0E13]">
+          <button 
+            onClick={onCancel}
+            className="px-4 py-2 font-bold uppercase tracking-wider text-white bg-transparent hover:bg-[#1E1E28] border border-[#232833] transition-all rounded text-sm"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={onConfirm}
+            className="px-4 py-2 font-bold uppercase tracking-wider text-[#0B0C10] bg-[#00E676] hover:bg-[#00C853] transition-all rounded text-sm shadow-[0_0_10px_rgba(0,230,118,0.3)]"
+          >
+            Confirm Execution
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ExecutionPanel() {
   const [positions, setPositions] = useState<any[]>([]);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{isOpen: boolean; action: (() => void) | null; message: string; title: string}>({
+    isOpen: false,
+    action: null,
+    message: "",
+    title: ""
+  });
 
   const fetchState = async () => {
     try {
@@ -26,48 +75,97 @@ export default function ExecutionPanel() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleClosePosition = async (symbol: string) => {
-    setLoading(true);
-    try {
-      await fetch(`/api/execution/position/close/${symbol}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
-      await fetchState();
-    } catch (e) { console.error(e); }
-    setLoading(false);
+  const mockCreateOrder = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Confirm Trade Execution",
+      message: "Are you sure you want to execute a MARKET BUY order for 0.1 BTC? This action cannot be undone.",
+      action: async () => {
+        setLoading(true);
+        try {
+          const res = await fetch('/api/execution/order/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({
+              symbol: "BTCUSDT",
+              side: "LONG",
+              order_type: "MARKET",
+              quantity: 0.1,
+              price: 50000.00,
+              stop_loss: 49000.00,
+              take_profit: 52000.00,
+              mode: "PAPER_SIMULATED"
+            })
+          });
+          if (res.ok) toast.success("Order created successfully!");
+          else toast.error("Failed to create order");
+          await fetchState();
+        } catch (e: any) { 
+          toast.error("Error creating order: " + e.message);
+          console.error(e); 
+        }
+        setLoading(false);
+        setConfirmModal({ isOpen: false, action: null, message: "", title: "" });
+      }
+    });
   };
 
-  const handleCancelOrder = async (id: number) => {
-    setLoading(true);
-    try {
-      await fetch(`/api/execution/order/cancel/${id}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
-      await fetchState();
-    } catch (e) { console.error(e); }
-    setLoading(false);
+  const handleClosePosition = (symbol: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Close Position",
+      message: `Are you sure you want to close your active position for ${symbol} at MARKET price?`,
+      action: async () => {
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/execution/position/close/${symbol}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
+          if (res.ok) toast.success(`Position ${symbol} closed successfully!`);
+          else toast.error(`Failed to close position ${symbol}`);
+          await fetchState();
+        } catch (e: any) { 
+          toast.error("Error closing position: " + e.message);
+          console.error(e); 
+        }
+        setLoading(false);
+        setConfirmModal({ isOpen: false, action: null, message: "", title: "" });
+      }
+    });
   };
 
-  const mockCreateOrder = async () => {
-    setLoading(true);
-    try {
-      await fetch('/api/execution/order/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({
-          symbol: "BTCUSDT",
-          side: "LONG",
-          order_type: "MARKET",
-          quantity: 0.1,
-          price: 50000.00,
-          stop_loss: 49000.00,
-          take_profit: 52000.00,
-          mode: "PAPER_SIMULATED"
-        })
-      });
-      await fetchState();
-    } catch (e) { console.error(e); }
-    setLoading(false);
+  const handleCancelOrder = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Order",
+      message: `Are you sure you want to cancel order #${id}?`,
+      action: async () => {
+        setLoading(true);
+        try {
+          const res = await fetch(`/api/execution/order/cancel/${id}`, { method: 'POST', headers: { 'Accept': 'application/json' } });
+          if (res.ok) toast.success(`Order #${id} cancelled successfully!`);
+          else toast.error(`Failed to cancel order #${id}`);
+          await fetchState();
+        } catch (e: any) { 
+          toast.error("Error cancelling order: " + e.message);
+          console.error(e); 
+        }
+        setLoading(false);
+        setConfirmModal({ isOpen: false, action: null, message: "", title: "" });
+      }
+    });
   };
 
   return (
-    <div className="p-6 bg-[#0B0C10] text-[#C5C6C7] font-mono rounded-lg border-4 border-[#1F2833] max-w-6xl mx-auto shadow-2xl mt-6">
+    <>
+      <ConfirmationModal 
+        isOpen={confirmModal.isOpen} 
+        title={confirmModal.title}
+        message={confirmModal.message} 
+        onConfirm={() => {
+          if (confirmModal.action) confirmModal.action();
+        }} 
+        onCancel={() => setConfirmModal({ isOpen: false, action: null, message: "", title: "" })} 
+      />
+      <div className="p-6 bg-[#0B0C10] text-[#C5C6C7] font-mono rounded-lg border-4 border-[#1F2833] max-w-6xl mx-auto shadow-2xl mt-6">
       <div className="flex justify-between items-center mb-6 border-b-2 border-[#1F2833] pb-4">
         <h2 className="text-2xl font-bold text-white tracking-widest uppercase">Execution & Positions</h2>
         <div className="flex gap-4">
@@ -170,6 +268,7 @@ export default function ExecutionPanel() {
           </table>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

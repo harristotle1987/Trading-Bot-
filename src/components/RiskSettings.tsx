@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function RiskSettings() {
   const [activeTab, setActiveTab] = useState<'API' | 'RISK' | 'BROKER'>('API');
@@ -20,6 +21,12 @@ export default function RiskSettings() {
       ctrader_client_id: '',
       ctrader_secret: ''
   });
+
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
+
+  const togglePassword = (name: string) => {
+      setShowPasswords(prev => ({...prev, [name]: !prev[name]}));
+  };
 
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -69,11 +76,14 @@ export default function RiskSettings() {
         body: JSON.stringify(settings)
       });
       if (res.ok) {
+        toast.success('Settings saved successfully.');
         setMessage('Settings saved successfully.');
       } else {
+        toast.error('Failed to save settings.');
         setMessage('Failed to save settings.');
       }
-    } catch (err) {
+    } catch (err: any) {
+      toast.error(`Error saving settings: ${err.message}`);
       setMessage('Error saving settings.');
     }
     setLoading(false);
@@ -106,6 +116,18 @@ export default function RiskSettings() {
                 cTrader Integration
             </button>
             <button 
+                onClick={async () => {
+                  const res = await fetch('/api/account/balance/reset', { method: 'POST' });
+                  if (res.ok) {
+                    setMessage('Balance reset to $10,000');
+                    setTimeout(() => setMessage(''), 3000);
+                  }
+                }}
+                className="px-4 py-2 uppercase font-bold text-sm transition-colors whitespace-nowrap text-[#FF1744] hover:text-red-300 border-l border-[#1F2833]"
+            >
+                Reset Demo Balance
+            </button>
+            <button 
                 onClick={() => setActiveTab('RISK')} 
                 className={`px-4 py-2 uppercase font-bold text-sm transition-colors whitespace-nowrap ${activeTab === 'RISK' ? 'text-[#3DDBD9] border-b-2 border-[#3DDBD9]' : 'text-[#838C9C] hover:text-white'}`}
             >
@@ -118,26 +140,36 @@ export default function RiskSettings() {
                 <div className="space-y-6">
                     <div className="flex flex-col gap-2">
                       <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">NVIDIA NIM API Key</label>
-                      <input
-                        type="password"
-                        name="nvidia_nim"
-                        value={apiKeys.nvidia_nim}
-                        onChange={handleApiChange}
-                        placeholder="nvapi-..."
-                        className="bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
-                      />
+                      <div className="relative">
+                          <input
+                            type={showPasswords['nvidia_nim'] ? 'text' : 'password'}
+                            name="nvidia_nim"
+                            value={apiKeys.nvidia_nim}
+                            onChange={handleApiChange}
+                            placeholder="nvapi-..."
+                            className="w-full bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 pr-16 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
+                          />
+                          <button type="button" onClick={() => togglePassword('nvidia_nim')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#838C9C] hover:text-[#3DDBD9] font-bold uppercase">
+                            {showPasswords['nvidia_nim'] ? 'Hide' : 'Show'}
+                          </button>
+                      </div>
                       <span className="text-[10px] text-[#45A29E]">Required for Llama 3.1 70B Instruct forensic reasoning.</span>
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">Finnhub API Key</label>
-                      <input
-                        type="password"
-                        name="finnhub"
-                        value={apiKeys.finnhub}
-                        onChange={handleApiChange}
-                        placeholder="cg..."
-                        className="bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
-                      />
+                      <div className="relative">
+                          <input
+                            type={showPasswords['finnhub'] ? 'text' : 'password'}
+                            name="finnhub"
+                            value={apiKeys.finnhub}
+                            onChange={handleApiChange}
+                            placeholder="cg..."
+                            className="w-full bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 pr-16 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
+                          />
+                          <button type="button" onClick={() => togglePassword('finnhub')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#838C9C] hover:text-[#3DDBD9] font-bold uppercase">
+                            {showPasswords['finnhub'] ? 'Hide' : 'Show'}
+                          </button>
+                      </div>
                       <span className="text-[10px] text-[#45A29E]">Required for real-time macro sentiment and news headlines.</span>
                     </div>
                 </div>
@@ -147,23 +179,33 @@ export default function RiskSettings() {
                 <div className="space-y-6">
                     <div className="flex flex-col gap-2">
                       <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">cTrader Open API Client ID</label>
-                      <input
-                        type="text"
-                        name="ctrader_client_id"
-                        value={brokerKeys.ctrader_client_id}
-                        onChange={handleBrokerChange}
-                        className="bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
-                      />
+                      <div className="relative">
+                          <input
+                            type={showPasswords['ctrader_client_id'] ? 'text' : 'password'}
+                            name="ctrader_client_id"
+                            value={brokerKeys.ctrader_client_id}
+                            onChange={handleBrokerChange}
+                            className="w-full bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 pr-16 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
+                          />
+                          <button type="button" onClick={() => togglePassword('ctrader_client_id')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#838C9C] hover:text-[#3DDBD9] font-bold uppercase">
+                            {showPasswords['ctrader_client_id'] ? 'Hide' : 'Show'}
+                          </button>
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2">
                       <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">cTrader Open API Secret</label>
-                      <input
-                        type="password"
-                        name="ctrader_secret"
-                        value={brokerKeys.ctrader_secret}
-                        onChange={handleBrokerChange}
-                        className="bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
-                      />
+                      <div className="relative">
+                          <input
+                            type={showPasswords['ctrader_secret'] ? 'text' : 'password'}
+                            name="ctrader_secret"
+                            value={brokerKeys.ctrader_secret}
+                            onChange={handleBrokerChange}
+                            className="w-full bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-3 pr-16 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono"
+                          />
+                          <button type="button" onClick={() => togglePassword('ctrader_secret')} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#838C9C] hover:text-[#3DDBD9] font-bold uppercase">
+                            {showPasswords['ctrader_secret'] ? 'Hide' : 'Show'}
+                          </button>
+                      </div>
                     </div>
                 </div>
             )}

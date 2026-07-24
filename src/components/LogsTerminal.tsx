@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function LogsTerminal() {
   const [logs, setLogs] = useState<any[]>([]);
@@ -29,15 +30,20 @@ export default function LogsTerminal() {
   });
 
   const handleExportCSV = () => {
-    const csvContent = "data:text/csv;charset=utf-8," 
-        + "Timestamp,Level,Module,Message\n"
-        + filteredLogs.map(e => `${e.timestamp},${e.level},${e.module},"${e.message}"`).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "system_logs.csv");
-    document.body.appendChild(link);
-    link.click();
+    try {
+      const csvContent = "data:text/csv;charset=utf-8," 
+          + "Timestamp,Level,Module,Message\n"
+          + filteredLogs.map(e => `${e.timestamp},${e.level},${e.module},"${e.message}"`).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "system_logs.csv");
+      document.body.appendChild(link);
+      link.click();
+      toast.success("Logs exported to CSV successfully");
+    } catch (err: any) {
+      toast.error(`Error exporting logs: ${err.message}`);
+    }
   };
 
   const getLogColor = (level: string) => {

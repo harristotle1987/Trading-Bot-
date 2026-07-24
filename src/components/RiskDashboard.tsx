@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 
 export default function RiskDashboard() {
   const [metrics, setMetrics] = useState({
@@ -25,7 +26,7 @@ export default function RiskDashboard() {
 
   const handleKillSwitch = () => {
     setKillSwitchActive(true);
-    alert("EMERGENCY KILL-SWITCH ENGAGED. ALL OPEN ORDERS CANCELLED.");
+    toast.error("EMERGENCY KILL-SWITCH ENGAGED. ALL OPEN ORDERS CANCELLED.");
   };
 
   const drawdownPct = Math.min(100, Math.max(0, (metrics.dailyPnL < 0 ? Math.abs(metrics.dailyPnL) / 10000 * 100 : 0)));

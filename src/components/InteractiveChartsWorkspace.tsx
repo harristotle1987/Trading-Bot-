@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toast } from "sonner";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries } from "lightweight-charts";
 import { TRADABLE_PAIRS } from "../App";
 
@@ -29,11 +30,18 @@ export default function InteractiveChartsWorkspace() {
   // Run Agent Scan
   const triggerAgentScan = async () => {
     setIsScanning(true);
+    toast("Initiating AI agent forensics scan...");
     try {
       const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}`);
       const data = await res.json();
-      setRecommendations(data.recommended_pairs || []);
-    } catch (err) {
+      if (res.ok) {
+        setRecommendations(data.recommended_pairs || []);
+        toast.success("Agent forensics scan complete");
+      } else {
+        toast.error("Failed to run agent scan");
+      }
+    } catch (err: any) {
+      toast.error(`Agent scan error: ${err.message}`);
       console.error("Failed to run agent scan:", err);
     } finally {
       setIsScanning(false);
@@ -57,6 +65,17 @@ export default function InteractiveChartsWorkspace() {
   // Switch Active Chart Symbol instantly
   const handleSelectPair = (symbol: string) => {
     setSelectedSymbol(symbol);
+    toast(`Chart updated: ${symbol}`);
+  };
+
+  const handleSetActiveMode = (mode: "DEMO" | "LIVE") => {
+    setActiveMode(mode);
+    toast(`Mode switched to ${mode}`);
+  };
+
+  const handleSetTimeframe = (tf: string) => {
+    setTimeframe(tf);
+    toast(`Timeframe set to ${tf}`);
   };
 
   // Execute 1-Click Demo Order
@@ -75,9 +94,41 @@ export default function InteractiveChartsWorkspace() {
         }),
       });
       const data = await res.json();
-      alert(`[DEMO MODE] ${data.message}`);
-    } catch (err) {
+      if (res.ok) {
+        toast.success(`[DEMO MODE] ${data.message || 'Trade executed successfully'}`);
+      } else {
+        toast.error(`[DEMO MODE] Error: ${data.error || 'Failed to place order'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Demo trade failed: ${err.message}`);
       console.error("Demo trade failed:", err);
+    }
+  };
+
+  // Execute 1-Click Live Order
+  const executeLiveTrade = async (pair: RecommendedPair) => {
+    try {
+      const res = await fetch("/api/agent-workspace/live/place-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: pair.symbol,
+          side: pair.directional_bias.includes("BUY") ? "BUY" : "SELL",
+          qty: 1.0,
+          price: pair.suggested_entry,
+          stop_loss: pair.suggested_sl,
+          take_profit: pair.suggested_tp,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`[LIVE MODE] ${data.message || 'Trade executed successfully'}`);
+      } else {
+        toast.error(`[LIVE MODE] Error: ${data.error || 'Failed to place order'}`);
+      }
+    } catch (err: any) {
+      toast.error(`Live trade failed: ${err.message}`);
+      console.error("Live trade failed:", err);
     }
   };
 
@@ -209,8 +260,12 @@ export default function InteractiveChartsWorkspace() {
               });
             }
           }
-        } catch (err) {
-          console.error("Bybit WS message error", err);
+        } catch (err: any) {
+          if (err && err.message && err.message.includes("Cannot update oldest data")) {
+              // Ignore lightweight-charts error for older data
+          } else {
+              console.error("Bybit WS message error", err);
+          }
         }
       };
     };
@@ -262,7 +317,7 @@ export default function InteractiveChartsWorkspace() {
           {/* Mode Switcher */}
           <div className="flex bg-[#12161D] border border-[#1F2833] rounded p-1">
             <button
-              onClick={() => setActiveMode("DEMO")}
+              onClick={() => handleSetActiveMode("DEMO")}
               className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
                 activeMode === "DEMO" ? "bg-[#00E676] text-[#0B0C10] font-bold" : "text-gray-400"
               }`}
@@ -270,7 +325,7 @@ export default function InteractiveChartsWorkspace() {
               DEMO ($10,000)
             </button>
             <button
-              onClick={() => setActiveMode("LIVE")}
+              onClick={() => handleSetActiveMode("LIVE")}
               className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
                 activeMode === "LIVE" ? "bg-[#FF1744] text-white font-bold" : "text-gray-400"
               }`}
@@ -302,7 +357,7 @@ export default function InteractiveChartsWorkspace() {
                   <button
                     key={tf}
                     className={`px-3 py-0.5 text-xs font-bold transition-colors font-mono ${timeframe === tf ? 'bg-[#3DDBD9] text-[#0B0C10]' : 'text-[#838C9C] hover:bg-[#1F2833]'}`}
-                    onClick={() => setTimeframe(tf)}
+                    onClick={() => handleSetTimeframe(tf)}
                   >
                     {tf}
                   </button>
@@ -374,12 +429,19 @@ export default function InteractiveChartsWorkspace() {
                     >
                       View Chart
                     </button>
-                    {activeMode === "DEMO" && (
+                    {activeMode === "DEMO" ? (
                       <button
                         onClick={() => executeDemoTrade(item)}
                         className={`flex-1 py-1.5 text-[#0B0C10] font-bold text-xs font-mono rounded transition-colors shadow-sm ${item.directional_bias.includes("BUY") ? "bg-[#00E676] hover:bg-[#66FCF1]" : "bg-[#FF1744] text-white hover:bg-[#ff4d6d]"}`}
                       >
                         Demo {item.directional_bias.includes("BUY") ? "Buy" : "Sell"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => executeLiveTrade(item)}
+                        className={`flex-1 py-1.5 text-[#0B0C10] font-bold text-xs font-mono rounded transition-colors shadow-sm ${item.directional_bias.includes("BUY") ? "bg-[#00E676] hover:bg-[#66FCF1]" : "bg-[#FF1744] text-white hover:bg-[#ff4d6d]"}`}
+                      >
+                        Live {item.directional_bias.includes("BUY") ? "Buy" : "Sell"}
                       </button>
                     )}
                   </div>
