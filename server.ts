@@ -140,7 +140,7 @@ async function startServer() {
               }
           }
       } catch (e: any) {
-          console.error("cTrader Setup Error:", e.message || e);
+          console.error("cTrader Setup Error:", e);
       }
   };
   
