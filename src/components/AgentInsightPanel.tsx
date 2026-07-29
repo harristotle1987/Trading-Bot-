@@ -1,9 +1,17 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { getNvidiaTradeSignals, TradeSignal } from '../../services/nvidia_trader';
 import { calculatePositionTrajectory } from '../utils/tradeMath';
 import { TRADABLE_PAIRS } from '../App';
+
+interface TradeSignal {
+  symbol: string;
+  type: "UP" | "DOWN";
+  entryPrice: number;
+  winRate: string;
+  slPrice: number;
+  tpPrice: number;
+}
 
 export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: string }) {
   const [signals, setSignals] = useState<TradeSignal[]>([]);
@@ -20,9 +28,27 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
   useEffect(() => {
     const fetchSignals = async () => {
       setLoading(true);
-      const data = await getNvidiaTradeSignals();
-      setSignals(data);
-      setLoading(false);
+      try {
+        const res = await fetch("/api/agent-workspace/scan");
+        if (res.ok) {
+          const data = await res.json();
+          const mappedSignals: TradeSignal[] = data.recommended_pairs.map((p: any) => ({
+            symbol: p.symbol,
+            type: p.directional_bias.includes("BUY") ? "UP" : "DOWN",
+            entryPrice: p.suggested_entry,
+            winRate: p.win_rate_probability + "%",
+            slPrice: p.suggested_sl,
+            tpPrice: p.suggested_tp
+          }));
+          setSignals(mappedSignals);
+        } else {
+            console.error("Failed to fetch signals from API");
+        }
+      } catch (err) {
+        console.error("Failed to fetch real prices for signals:", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchSignals();
     const interval = setInterval(fetchSignals, 5000); // Poll every 5s
