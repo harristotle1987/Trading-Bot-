@@ -4,6 +4,9 @@ import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
 
@@ -13,13 +16,233 @@ async function startServer() {
 
   // API Routes
   
+
   let demoBalance = 10000;
+  let liveBalance = 50000.0;
+  let db: any = null;
+
+  try {
+      const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+      if (fs.existsSync(configPath)) {
+          const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+          const firebaseApp = initializeApp(config);
+          db = getFirestore(firebaseApp, config.firestoreDatabaseId);
+
+          getDoc(doc(db, "system", "balances")).then(snap => {
+              if (snap.exists()) {
+                  demoBalance = snap.data().demoBalance ?? 10000;
+                  liveBalance = snap.data().liveBalance ?? 50000.0;
+              } else {
+                  setDoc(doc(db, "system", "balances"), { demoBalance, liveBalance });
+              }
+              console.log("Loaded demoBalance from Firestore:", demoBalance, "liveBalance:", liveBalance);
+          }).catch(err => {
+              console.error("Error loading demoBalance from Firestore:", err);
+          });
+      }
+  } catch (err) {
+      console.error("Firebase client SDK init error:", err);
+  }
+
 
   // Bybit V5 Live Wallet Balance Service
   const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "";
   const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET || "";
   const BYBIT_BASE_URL = "https://api.bybit.com"; // Use "https://api-testnet.bybit.com" for Testnet
+
+  // Global Price Cache
+  const GLOBAL_PRICES: Record<string, number> = {};
   
+  // cTrader Integration
+  let cTraderConn: any = null;
+  let cTraderAccountId: number | null = null;
+  let cTraderSymbolMap: Record<number, string> = {};
+  let cTraderNameMap: Record<string, number> = {};
+  let cTraderDigitsMap: Record<number, number> = {};
+
+  const setupCTrader = async () => {
+      if (!process.env.CTRADER_CLIENT_ID || !process.env.CTRADER_CLIENT_SECRET) return;
+      if (cTraderConn) return;
+
+      cTraderConn = new CTraderConnection({
+          host: "live.ctraderapi.com",
+          port: 5035,
+      });
+
+      try {
+          await cTraderConn.open();
+          console.log("cTrader Connected");
+
+          cTraderConn.on("ProtoOASpotEvent", (msg: any) => {
+              if (msg.bid) {
+                  const symbolName = cTraderSymbolMap[msg.symbolId];
+                  const digits = cTraderDigitsMap[msg.symbolId] || 5;
+                  if (symbolName) {
+                      GLOBAL_PRICES[symbolName] = msg.bid / Math.pow(10, digits);
+                  }
+              }
+          });
+
+          await cTraderConn.sendCommand("ProtoOAApplicationAuthReq", {
+              clientId: process.env.CTRADER_CLIENT_ID,
+              clientSecret: process.env.CTRADER_CLIENT_SECRET,
+          });
+          console.log("cTrader App Authenticated");
+
+          setInterval(() => cTraderConn.sendHeartbeat(), 25000);
+
+          if (process.env.CTRADER_ACCESS_TOKEN) {
+              const token = process.env.CTRADER_ACCESS_TOKEN;
+              const accounts = await CTraderConnection.getAccessTokenAccounts(token);
+              if (accounts && accounts.length > 0) {
+                  cTraderAccountId = accounts[0].accountId;
+                  await cTraderConn.sendCommand("ProtoOAAccountAuthReq", {
+                      accessToken: token,
+                      ctidTraderAccountId: cTraderAccountId,
+                  });
+                  console.log("cTrader Account Authenticated:", cTraderAccountId);
+
+                  const symbolsRes = await cTraderConn.sendCommand("ProtoOASymbolsListReq", {
+                      ctidTraderAccountId: cTraderAccountId,
+                  });
+
+                  if (symbolsRes && symbolsRes.symbol) {
+                      symbolsRes.symbol.forEach((sym: any) => {
+                          cTraderSymbolMap[sym.symbolId] = sym.symbolName;
+                          cTraderNameMap[sym.symbolName] = sym.symbolId;
+                      });
+                      
+                      const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
+                      
+                      const symbolIdsToSubscribe = forexSymbols
+                          .map(s => cTraderNameMap[s])
+                          .filter(id => id !== undefined);
+
+                      if (symbolIdsToSubscribe.length > 0) {
+                          const detailsRes = await cTraderConn.sendCommand("ProtoOASymbolByIdReq", {
+                              ctidTraderAccountId: cTraderAccountId,
+                              symbolId: symbolIdsToSubscribe
+                          });
+                          
+                          if (detailsRes && detailsRes.symbol) {
+                              detailsRes.symbol.forEach((sym: any) => {
+                                  cTraderDigitsMap[sym.symbolId] = sym.digits;
+                              });
+                          }
+
+                          await cTraderConn.sendCommand("ProtoOASubscribeSpotsReq", {
+                              ctidTraderAccountId: cTraderAccountId,
+                              symbolId: symbolIdsToSubscribe
+                          });
+                          console.log("Subscribed to cTrader spots:", symbolIdsToSubscribe);
+                      }
+                  }
+              }
+          }
+      } catch (e: any) {
+          console.error("cTrader Setup Error:", e.message || e);
+      }
+  };
+  
+  setupCTrader();
+
+  const updatePrices = async () => {
+      const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT"];
+      const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
+      
+      try {
+          // Crypto from Bybit
+          const bybitRes = await fetch("https://api.bybit.com/v5/market/tickers?category=linear");
+          if (!bybitRes.ok) {
+              console.error("Bybit fetch failed:", bybitRes.statusText);
+          } else {
+              const bybitData = await bybitRes.json();
+              const tickers = bybitData.result?.list || [];
+              
+              for (const s of cryptoSymbols) {
+                  const ticker = tickers.find((t: any) => t.symbol === s);
+                  if (ticker) {
+                      GLOBAL_PRICES[s] = parseFloat(ticker.lastPrice);
+                  } else {
+                      console.warn(`Bybit ticker not found for ${s}`);
+                  }
+              }
+          }
+          
+          // Forex from Polygon
+          const forexFallbacks: Record<string, number> = {
+            "EURUSD": 1.0850, "GBPUSD": 1.2850, "USDJPY": 150.00, "AUDUSD": 0.6700,
+            "USDCAD": 1.3600, "USDCHF": 0.9200, "NZDUSD": 0.6100, "EURGBP": 0.8400,
+            "EURJPY": 160.00, "GBPJPY": 185.00, "AUDJPY": 95.00, "EURAUD": 1.6500,
+            "GBPCAD": 1.7500, "CADJPY": 105.00, "CHFJPY": 170.00
+          };
+          
+          if (process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET) {
+              for (const s of forexSymbols) {
+                  // We only fallback if GLOBAL_PRICES hasn't been set by WebSocket
+                  if (!GLOBAL_PRICES[s]) {
+                      GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
+                  }
+              }
+          } else if (process.env.POLYGON_API_KEY) {
+              let keyForbidden = false;
+              for (const s of forexSymbols) {
+                  if (keyForbidden) {
+                      if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
+                      else GLOBAL_PRICES[s] += GLOBAL_PRICES[s] * (Math.random() * 0.0001 * 2 - 0.0001);
+                      continue;
+                  }
+                  
+                  // Polygon expects forex symbols in a specific format (e.g., EUR/USD)
+                  const polygonSymbol = `C:${s.substring(0,3)}${s.substring(3)}`;
+                  try {
+                      const res = await fetch(`https://api.polygon.io/v2/snapshot/locale/global/markets/forex/tickers/${polygonSymbol}?apiKey=${process.env.POLYGON_API_KEY}`);
+                      
+                      if (res.status === 403) {
+                          keyForbidden = true;
+                          throw new Error("Forbidden");
+                      }
+                      if (!res.ok) {
+                          throw new Error(`Polygon fetch failed for ${s}: ${res.statusText}`);
+                      }
+                      
+                      const data = await res.json();
+                      if (data.results?.ticker?.min?.c) {
+                          GLOBAL_PRICES[s] = data.results.ticker.min.c;
+                      } else {
+                          throw new Error(`Polygon fetch returned no data for ${s}`);
+                      }
+                  } catch (e) {
+                      if (e.message === "Forbidden") {
+                          console.warn("Polygon API key is Forbidden. Switching to fallbacks.");
+                      } else {
+                          console.warn(`Falling back to default price for ${s} due to:`, e.message);
+                      }
+                      if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
+                      else GLOBAL_PRICES[s] += GLOBAL_PRICES[s] * (Math.random() * 0.0001 * 2 - 0.0001);
+                  }
+              }
+          } else {
+            forexSymbols.forEach(s => {
+                if (!GLOBAL_PRICES[s]) {
+                    GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
+                } else {
+                    // Simulate random tick movement if no live API
+                    const volatility = 0.0001;
+                    const change = GLOBAL_PRICES[s] * (Math.random() * volatility * 2 - volatility);
+                    GLOBAL_PRICES[s] = GLOBAL_PRICES[s] + change;
+                }
+            });
+          }
+          
+      } catch (e) {
+          console.error("Failed to update prices:", e);
+      }
+  };
+  
+  setInterval(updatePrices, 3000); // Update every 3s
+  updatePrices();
+
   app.get("/api/account/balances", async (req, res) => {
       console.log("Fetching balances... started");
       // Demo Capital Engine
@@ -32,9 +255,11 @@ async function startServer() {
       console.log("Demo balance fetched:", demoBalance);
 
       // Live Bybit Capital Engine
-      let live_data = { total_equity: 0.0, available_balance: 0.0, currency: "USDT", status: "UNCONFIGURED" };
+      
+      let live_data = { total_equity: liveBalance, available_balance: liveBalance, currency: "USDT", status: "SIMULATED" };
       
       if (BYBIT_API_KEY && BYBIT_API_SECRET) {
+
           try {
               console.log("Fetching Bybit balances...");
               // ... (rest of the code)
@@ -98,6 +323,7 @@ async function startServer() {
 
   app.post("/api/account/balance/reset", (req, res) => {
     demoBalance = 10000;
+    if (db) setDoc(doc(db, "system", "balances"), { demoBalance, liveBalance }, { merge: true }).catch(console.error);
     res.json({ balance: demoBalance });
   });
   
@@ -110,8 +336,26 @@ async function startServer() {
     max_concurrent_trades: 3,
     max_daily_drawdown_pct: 0.05,
     max_spread_pct: 0.001,
-    default_risk_pct: 0.01
+    default_risk_pct: 0.01,
+    default_trade_amount: 100,
+    autoTrade: {
+        active: false,
+        min_profit_threshold: 0.75,
+        trade_capital_alloc: 1000,
+        sl_threshold_pct: 0.02,
+        tp_threshold_pct: 0.06,
+        max_daily_loss: 500
+    }
   };
+
+  if (db) {
+      getDoc(doc(db, "system", "riskSettings")).then(snap => {
+          if (snap.exists()) {
+              riskSettings = { ...riskSettings, ...snap.data() };
+              console.log("Loaded riskSettings from Firestore");
+          }
+      }).catch(err => console.error("Error loading riskSettings:", err));
+  }
 
   app.get("/api/risk/settings", (req, res) => {
     res.json(riskSettings);
@@ -119,6 +363,7 @@ async function startServer() {
 
   app.post("/api/risk/settings", express.json(), (req, res) => {
     riskSettings = { ...riskSettings, ...req.body };
+    if (db) setDoc(doc(db, "system", "riskSettings"), riskSettings, { merge: true }).catch(console.error);
     res.json(riskSettings);
   });
 
@@ -134,20 +379,22 @@ async function startServer() {
   let orders: any[] = [];
   let positions: any[] = [];
   let nextOrderId = 1;
+  
   let GLOBAL_POSITIONS: any[] = [];
   let nextPosId = 1;
-  
-  const DB_FILE = path.join(process.cwd(), 'trades_db.json');
-  if (fs.existsSync(DB_FILE)) {
-      try {
-          const data = fs.readFileSync(DB_FILE, 'utf-8');
-          GLOBAL_POSITIONS = JSON.parse(data);
-          nextPosId = GLOBAL_POSITIONS.length + 1;
-      } catch(e) {}
+
+  if (db) {
+      getDoc(doc(db, "system", "trades")).then(snap => {
+          if (snap.exists() && snap.data().positions) {
+              GLOBAL_POSITIONS = snap.data().positions;
+              nextPosId = GLOBAL_POSITIONS.length + 1;
+              console.log("Loaded " + GLOBAL_POSITIONS.length + " trades from Firestore");
+          }
+      }).catch(err => console.error("Error loading trades:", err));
   }
 
   const saveTrades = () => {
-      fs.writeFileSync(DB_FILE, JSON.stringify(GLOBAL_POSITIONS, null, 2));
+      if (db) setDoc(doc(db, "system", "trades"), { positions: GLOBAL_POSITIONS }).catch(console.error);
   };
 
   app.get("/api/execution/positions", (req, res) => {
@@ -225,6 +472,7 @@ async function startServer() {
 
   let agentState = {
     status: "IDLE", // IDLE, RUNNING, PAUSED, EMERGENCY_STOP
+    current_activity: "IDLE",
     uptime: 0,
     loop_latency: 0,
     total_trades: 0,
@@ -383,8 +631,110 @@ async function startServer() {
       });
   });
 
+
+  app.get("/api/config/keys", (req, res) => {
+      res.json({
+          nvidia: !!process.env.NVIDIA_API_KEY,
+          bybit: !!(process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET),
+          polygon: !!process.env.POLYGON_API_KEY,
+          finnhub: !!process.env.FINNHUB_API_KEY,
+          ctrader: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET),
+          ctrader_needs_auth: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET && !process.env.CTRADER_ACCESS_TOKEN)
+      });
+  });
+
+  app.post("/api/config/keys", express.json(), (req, res) => {
+      const { nvidia, bybit_key, bybit_secret, polygon, finnhub, ctrader_client_id, ctrader_client_secret, ctrader_access_token } = req.body;
+      if (nvidia) process.env.NVIDIA_API_KEY = nvidia;
+      if (bybit_key) process.env.BYBIT_API_KEY = bybit_key;
+      if (bybit_secret) process.env.BYBIT_API_SECRET = bybit_secret;
+      if (polygon) process.env.POLYGON_API_KEY = polygon;
+      if (finnhub) process.env.FINNHUB_API_KEY = finnhub;
+      if (ctrader_client_id) process.env.CTRADER_CLIENT_ID = ctrader_client_id;
+      if (ctrader_client_secret) process.env.CTRADER_CLIENT_SECRET = ctrader_client_secret;
+      if (ctrader_access_token) {
+          process.env.CTRADER_ACCESS_TOKEN = ctrader_access_token;
+          setupCTrader();
+      }
+      res.json({ status: "success" });
+  });
+
+  app.get("/api/ctrader/auth", (req, res) => {
+      const client_id = process.env.CTRADER_CLIENT_ID;
+      if (!client_id) {
+          return res.status(400).send("cTrader Client ID not configured on server.");
+      }
+      
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const proto = req.headers['x-forwarded-proto'] || 'https';
+      const redirect_uri = `${proto}://${host}/api/ctrader/callback`;
+      
+      const authUrl = `https://openapi.ctrader.com/apps/auth?client_id=${client_id}&redirect_uri=${encodeURIComponent(redirect_uri)}&scope=trading`;
+      res.redirect(authUrl);
+  });
+
+  app.get("/api/ctrader/callback", async (req, res) => {
+      const { code } = req.query;
+      if (!code) return res.status(400).send("No code provided");
+
+      const client_id = process.env.CTRADER_CLIENT_ID;
+      const client_secret = process.env.CTRADER_CLIENT_SECRET;
+      
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const proto = req.headers['x-forwarded-proto'] || 'https';
+      const redirect_uri = `${proto}://${host}/api/ctrader/callback`;
+
+      try {
+          const tokenRes = await fetch(`https://connect.spotware.com/oauth/v2/token?grant_type=authorization_code&code=${code}&client_id=${client_id}&client_secret=${client_secret}&redirect_uri=${encodeURIComponent(redirect_uri)}`);
+          const tokenData = await tokenRes.json();
+          
+          if (tokenData.accessToken || tokenData.access_token) {
+              const token = tokenData.accessToken || tokenData.access_token;
+              process.env.CTRADER_ACCESS_TOKEN = token;
+              
+              // Restart cTrader connection with new token
+              setupCTrader();
+
+              res.send(`
+                <html>
+                  <body>
+                    <h2 style="font-family: sans-serif;">Successfully authenticated with cTrader!</h2>
+                    <p style="font-family: sans-serif;">You can close this window and return to the app.</p>
+                    <script>
+                        if (window.opener) {
+                            window.opener.postMessage({ type: 'CTRADER_OAUTH_SUCCESS', token: '${token}' }, '*');
+                        }
+                    </script>
+                  </body>
+                </html>
+              `);
+          } else {
+              res.status(400).json(tokenData);
+          }
+      } catch (e: any) {
+          res.status(500).json({ error: e.message });
+      }
+  });
+
   // Unified Trades Synchronization Engine, NVIDIA AI Inference & Finnhub News Pipeline
   app.get("/api/ai/finnhub-news", async (req, res) => {
+      const finnhubKey = process.env.FINNHUB_API_KEY;
+      if (finnhubKey) {
+          try {
+              const symbol = req.query.symbol;
+              const url = symbol 
+                ? `https://finnhub.io/api/v1/company-news?symbol=${symbol}&from=${new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]}&to=${new Date().toISOString().split('T')[0]}&token=${finnhubKey}`
+                : `https://finnhub.io/api/v1/news?category=general&token=${finnhubKey}`;
+              const finnhubRes = await fetch(url);
+              if (finnhubRes.ok) {
+                  const data = await finnhubRes.json();
+                  return res.json(data);
+              }
+          } catch (err) {
+              console.error("Finnhub fetch error:", err);
+          }
+      }
+      
       // Stub for Finnhub fetch, as requested to be integrated
       // Use real API keys in production via process.env.FINNHUB_API_KEY
       res.json([
@@ -405,12 +755,7 @@ async function startServer() {
   });
 
   // Agent Workspace API
-  const DEMO_ACCOUNT_STATE = {
-    balance: 10000.00,
-    currency: "USDT",
-    equity: 10000.00,
-    open_positions: GLOBAL_POSITIONS
-  };
+  
 
   app.get("/api/agent-workspace/scan", async (req, res) => {
     const mode = req.query.mode || "DEMO";
@@ -473,12 +818,53 @@ async function startServer() {
   });
 
   app.get("/api/agent-workspace/demo/account", (req, res) => {
-    res.json(DEMO_ACCOUNT_STATE);
+    res.json({ balance: demoBalance, currency: "USDT", equity: demoBalance, open_positions: GLOBAL_POSITIONS });
   });
 
-  app.post("/api/agent-workspace/demo/place-order", express.json(), (req, res) => {
+  async function getCurrentMarketPrice(symbol: string): Promise<number | null> {
+    try {
+        const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
+        if (binanceRes.ok) {
+            const data = await binanceRes.json();
+            return parseFloat(data.price);
+        }
+        // Fallback to Bybit
+        const bybitRes = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`);
+        if (bybitRes.ok) {
+            const bybitData = await bybitRes.json();
+            const list = bybitData.result?.list;
+            if (list && list.length > 0) {
+                return parseFloat(list[0].lastPrice);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch market price", e);
+    }
+    return null;
+}
+
+app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, res) => {
     const order = req.body;
-    const entry = order.price || 142.50; // Fallback if price missing
+    const currentPrice = await getCurrentMarketPrice(order.symbol);
+    const entry = currentPrice || order.price || 142.50;
+
+    const amount = order.amount || (order.qty * entry);
+    if (demoBalance < amount) {
+        return res.status(400).json({ error: "Insufficient demo balance" });
+    }
+    
+    demoBalance -= amount;
+    if (db) setDoc(doc(db, "system", "balances"), { demoBalance }, { merge: true }).catch(console.error);
+    
+    // Recalculate SL/TP if based on original entry
+    let sl = order.stop_loss;
+    let tp = order.take_profit;
+    if (order.price && currentPrice && currentPrice !== order.price) {
+        const diffRatio = currentPrice / order.price;
+        if (sl) sl = parseFloat((sl * diffRatio).toFixed(4));
+        if (tp) tp = parseFloat((tp * diffRatio).toFixed(4));
+    }
+
     const position = {
         id: `demo_pos_${nextPosId++}`,
         account_mode: "DEMO",
@@ -488,8 +874,8 @@ async function startServer() {
         quantity: order.qty,
         entry_price: entry,
         current_mark_price: entry,
-        stop_loss: order.stop_loss,
-        take_profit: order.take_profit,
+        stop_loss: sl,
+        take_profit: tp,
         unrealized_pnl: 0.00,
         ai_confidence_score: 88.5,
         status: "OPEN",
@@ -505,7 +891,7 @@ async function startServer() {
         side: executionSide,
         order_type: order.order_type || "MARKET",
         quantity: order.qty,
-        price: 142.50,
+        price: entry,
         status: "FILLED" 
     };
     orders.push(orderRecord);
@@ -518,8 +904,8 @@ async function startServer() {
             symbol: order.symbol,
             side: executionSide,
             size: order.qty,
-            entry_price: 142.50,
-            mark_price: 142.50,
+            entry_price: entry,
+            mark_price: entry,
             unrealized_pnl: 0.00
         });
     }
@@ -527,9 +913,27 @@ async function startServer() {
     res.json({ status: "SUCCESS", message: `Demo ${order.side} order placed for ${order.symbol}`, position });
   });
   
-  app.post("/api/agent-workspace/live/place-order", express.json(), (req, res) => {
+  app.post("/api/agent-workspace/live/place-order", express.json(), async (req, res) => {
     const order = req.body;
-    const entry = order.price || 142.50; // Fallback if price missing
+    const currentPrice = await getCurrentMarketPrice(order.symbol);
+    const entry = currentPrice || order.price || 142.50;
+
+    const amount = order.amount || (order.qty * entry);
+    if (liveBalance < amount) {
+        return res.status(400).json({ error: "Insufficient live balance" });
+    }
+    
+    liveBalance -= amount;
+    if (db) setDoc(doc(db, "system", "balances"), { liveBalance }, { merge: true }).catch(console.error);
+
+    let sl = order.stop_loss;
+    let tp = order.take_profit;
+    if (order.price && currentPrice && currentPrice !== order.price) {
+        const diffRatio = currentPrice / order.price;
+        if (sl) sl = parseFloat((sl * diffRatio).toFixed(4));
+        if (tp) tp = parseFloat((tp * diffRatio).toFixed(4));
+    }
+
     const position = {
         id: `live_pos_${nextPosId++}`,
         account_mode: "LIVE",
@@ -539,8 +943,8 @@ async function startServer() {
         quantity: order.qty,
         entry_price: entry,
         current_mark_price: entry,
-        stop_loss: order.stop_loss,
-        take_profit: order.take_profit,
+        stop_loss: sl,
+        take_profit: tp,
         unrealized_pnl: 0.00,
         ai_confidence_score: 92.5,
         status: "OPEN",
@@ -556,7 +960,7 @@ async function startServer() {
         side: executionSide,
         order_type: order.order_type || "MARKET",
         quantity: order.qty,
-        price: 142.50,
+        price: entry,
         status: "FILLED" 
     };
     orders.push(orderRecord);
@@ -569,8 +973,8 @@ async function startServer() {
             symbol: order.symbol,
             side: executionSide,
             size: order.qty,
-            entry_price: 142.50,
-            mark_price: 142.50,
+            entry_price: entry,
+            mark_price: entry,
             unrealized_pnl: 0.00
         });
     }
@@ -578,20 +982,10 @@ async function startServer() {
     res.json({ status: "SUCCESS", message: `Live ${order.side} order placed for ${order.symbol}`, position });
   });
   
-  app.get("/api/trades/active", (req, res) => {
+  app.get("/api/trades/active", async (req, res) => {
     console.log("Fetching active trades, query:", req.query);
     const mode = req.query.account_mode;
     
-    // Simulate price movement
-    GLOBAL_POSITIONS.forEach(p => {
-        if (p.status === "OPEN") {
-            const movement = (Math.random() - 0.5) * 2;
-            p.current_mark_price = +(p.current_mark_price + movement).toFixed(2);
-            const diff = p.side === 'BUY' ? p.current_mark_price - p.entry_price : p.entry_price - p.current_mark_price;
-            p.unrealized_pnl = +(diff * p.quantity).toFixed(2);
-        }
-    });
-
     let active = GLOBAL_POSITIONS.filter(p => p.status === "OPEN");
     if (mode && mode !== "ALL") {
         active = active.filter(p => p.account_mode === mode);
@@ -600,34 +994,183 @@ async function startServer() {
     res.json(active);
   });
 
-  app.delete("/api/trades/close", express.json(), (req, res) => {
-    console.log("--- Closing position request ---");
-    console.log("Body:", req.body);
-    console.log("GLOBAL_POSITIONS length:", GLOBAL_POSITIONS.length);
-    const { position_id, account_mode } = req.body;
-    console.log("Looking for:", position_id, account_mode);
-    const pos = GLOBAL_POSITIONS.find(p => {
-        console.log("Checking:", p.id, p.account_mode);
-        return p.id === position_id && p.account_mode === account_mode
-    });
-    if (pos) {
-        console.log("Found position to close:", pos.id);
-        pos.status = "CLOSED"; saveTrades();
-        pos.closed_at = new Date().toISOString();
-        if (pos.account_mode === "DEMO") {
-          demoBalance += pos.unrealized_pnl;
+  app.get("/api/trades/closed", (req, res) => {
+    console.log("Fetching closed trades...");
+    try {
+        console.log("GLOBAL_POSITIONS type:", typeof GLOBAL_POSITIONS);
+        console.log("GLOBAL_POSITIONS value:", GLOBAL_POSITIONS);
+        const closed = GLOBAL_POSITIONS ? GLOBAL_POSITIONS.filter(p => p.status === "CLOSED") : [];
+        res.json(closed);
+    } catch (e) {
+        console.error("Error in /api/trades/closed:", e);
+        res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
+  app.post("/api/trades/execute", express.json(), async (req, res) => {
+    const { symbol, side, capital, execution_price, account_mode } = req.body;
+    if (account_mode === "DEMO") {
+        if (demoBalance < capital) {
+            return res.status(400).json({ error: "Insufficient balance" });
         }
-        console.log("Position closed:", pos.id);
+        demoBalance -= capital;
+        if (db) setDoc(doc(db, "system", "balances"), { demoBalance }, { merge: true }).catch(console.error);
+    } else {
+        return res.status(400).json({ error: "Live mode not supported for this endpoint yet" });
+    }
+    
+    const position = {
+        id: "demo_pos_" + nextPosId++,
+        account_mode,
+        broker: "BUNKER",
+        symbol,
+        side,
+        quantity: capital / execution_price,
+        entry_price: execution_price,
+        current_mark_price: execution_price,
+        unrealized_pnl: 0,
+        realized_pnl: 0,
+        status: "OPEN",
+        opened_at: new Date().toISOString()
+    };
+    GLOBAL_POSITIONS.push(position);
+    saveTrades();
+    res.json({ message: "Trade executed successfully", position });
+  });
+
+  app.post("/api/trades/close", express.json(), async (req, res) => {
+    console.log("--- Closing position request ---");
+    const { position_id, account_mode, exit_price } = req.body;
+    
+    const pos = GLOBAL_POSITIONS.find(p => p.id === position_id && p.account_mode === account_mode);
+    
+    if (pos) {
+        // Calculate realized PnL
+        const quantity = pos.quantity;
+        const entry_price = pos.entry_price;
+        let realized_pnl = 0;
+        
+        if (pos.side.toUpperCase() === "BUY") {
+            realized_pnl = (exit_price - entry_price) * quantity;
+        } else {
+            realized_pnl = (entry_price - exit_price) * quantity;
+        }
+        realized_pnl = parseFloat(realized_pnl.toFixed(2));
+
+        pos.status = "CLOSED";
+        pos.closed_at = new Date().toISOString();
+        pos.realized_pnl = realized_pnl;
+        saveTrades();
+
+        const principal = quantity * entry_price;
+        const totalReturn = principal + realized_pnl;
+
+        // Account balance update
+        if (pos.account_mode === "DEMO") {
+            demoBalance += totalReturn;
+            if (db) setDoc(doc(db, "system", "balances"), { demoBalance }, { merge: true }).catch(console.error);
+        } else if (pos.account_mode === "LIVE") {
+            liveBalance += totalReturn;
+            if (db) setDoc(doc(db, "system", "balances"), { liveBalance }, { merge: true }).catch(console.error);
+            console.log("LIVE trade closed, updated simulated liveBalance to:", liveBalance);
+        }
+        
+        console.log("Position closed:", pos.id, "Realized PnL:", realized_pnl, "Principal:", principal, "Total Return:", totalReturn);
         res.json({
             status: "SUCCESS",
             message: `Position ${position_id} closed successfully.`,
-            realized_pnl: pos.unrealized_pnl
+            realized_pnl: realized_pnl
         });
     } else {
         console.log("Position NOT FOUND:", position_id, account_mode);
         res.status(404).json({ error: "Position not found" });
     }
   });
+
+  app.get("/api/health/diagnostics", async (req, res) => {
+      // Simulate pings to different services
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+      
+      const checkService = async (name: string, shouldFail: boolean, latencyMs: number) => {
+          const start = Date.now();
+          await sleep(latencyMs);
+          const latency = Date.now() - start;
+          
+          if (shouldFail) {
+              return { name, status: "Offline", latency: null, error: `Connection refused to ${name} endpoint.` };
+          }
+          if (latency > 500) {
+              return { name, status: "Degraded", latency, error: null };
+          }
+          return { name, status: "Connected", latency, error: null };
+      };
+
+      try {
+          const results = await Promise.all([
+              checkService("Neon PostgreSQL", false, 45 + Math.random() * 50),
+              checkService("Exchange API (Bybit)", false, 120 + Math.random() * 100),
+              checkService("Price Feed (Finnhub)", false, 80 + Math.random() * 60),
+          ]);
+          res.json({ status: "SUCCESS", diagnostics: results });
+      } catch (err: any) {
+          res.status(500).json({ status: "ERROR", error: err.message });
+      }
+  });
+
+  app.post("/api/ai/transcripts/ingest", express.json(), async (req, res) => {
+      const { title, transcript_text } = req.body;
+      const apiKey = process.env.NVIDIA_API_KEY;
+
+      if (!apiKey) {
+          return res.status(500).json({ status: "ERROR", message: "NVIDIA_API_KEY missing" });
+      }
+
+      const prompt = `
+        You are an elite institutional trading knowledge architect.
+        Extract clear, actionable trading rules and market conditions from this transcript:
+        
+        Title: ${title}
+        Transcript Text:
+        ${transcript_text}
+
+        Return a structured JSON object containing:
+        1. core_rules (list of concise entry/exit rules)
+        2. risk_filters (conditions when NOT to trade)
+        3. priority_setups (high-win-rate market patterns mentioned)
+        `;
+
+      try {
+        const response = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "meta/llama-3.1-70b-instruct",
+                messages: [{ role: "user", content: prompt }],
+                temperature: 0.1,
+                response_format: { type: "json_object" }
+            })
+        });
+        
+        const data = await response.json();
+        const extracted_knowledge = JSON.parse(data.choices[0].message.content);
+        
+        // Save to mock database (or actual DB in future)
+        console.log("Extracted knowledge:", extracted_knowledge);
+        
+        res.json({
+            status: "SUCCESS",
+            title: title,
+            rules: extracted_knowledge
+        });
+      } catch (e: any) {
+          console.error("Failed to query NVIDIA NIM API:", e);
+          res.status(500).json({ status: "FAILED", reason: e.message });
+      }
+  });
+
 
   // Phase 10: System Health & Audit Mocks
   let maintenanceMode = false;
@@ -765,6 +1308,13 @@ async function startServer() {
       res.json({ status: "success", snapshot });
   });
 
+
+
+
+  app.get("/api/market/prices", async (req, res) => {
+      res.json(GLOBAL_PRICES);
+  });
+  
   app.get("/api/snapshots", (req, res) => {
       res.json({ status: "success", snapshots: chartSnapshots });
   });
@@ -775,32 +1325,77 @@ async function startServer() {
       
       const isForex = typeof symbol === 'string' && ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP'].includes(symbol);
       
+
       if (isForex) {
-          // Generate mock forex data
-          const parsedLimit = parseInt(limit as string) || 500;
+          const polygonKey = process.env.POLYGON_API_KEY;
+          let multiplier = 1;
+          let timespan = 'minute';
           let intervalMs = 60000;
-          if (interval === "5") intervalMs = 300000;
-          if (interval === "15") intervalMs = 900000;
-          if (interval === "60") intervalMs = 3600000;
-          if (interval === "D") intervalMs = 86400000;
           
-          let currentPrice = 1.1000; // Mock EURUSD base
-          if (symbol === 'GBPUSD') currentPrice = 1.2500;
-          if (symbol === 'USDJPY') currentPrice = 150.00;
+          if (interval === "1") { multiplier = 1; timespan = 'minute'; intervalMs = 60000; }
+          else if (interval === "3") { multiplier = 3; timespan = 'minute'; intervalMs = 180000; }
+          else if (interval === "5") { multiplier = 5; timespan = 'minute'; intervalMs = 300000; }
+          else if (interval === "15") { multiplier = 15; timespan = 'minute'; intervalMs = 900000; }
+          else if (interval === "30") { multiplier = 30; timespan = 'minute'; intervalMs = 1800000; }
+          else if (interval === "60") { multiplier = 1; timespan = 'hour'; intervalMs = 3600000; }
+          else if (interval === "120") { multiplier = 2; timespan = 'hour'; intervalMs = 7200000; }
+          else if (interval === "240") { multiplier = 4; timespan = 'hour'; intervalMs = 14400000; }
+          else if (interval === "360") { multiplier = 6; timespan = 'hour'; intervalMs = 21600000; }
+          else if (interval === "720") { multiplier = 12; timespan = 'hour'; intervalMs = 43200000; }
+          else if (interval === "D") { multiplier = 1; timespan = 'day'; intervalMs = 86400000; }
+          else if (interval === "M") { multiplier = 1; timespan = 'month'; intervalMs = 2592000000; }
+          else if (interval === "W") { multiplier = 1; timespan = 'week'; intervalMs = 604800000; }
+          else { multiplier = 1; timespan = 'minute'; intervalMs = 60000; }
           
-          const list = [];
+          const parsedLimit = parseInt(limit as string) || 500;
+          
+          if (polygonKey) {
+              const to = Date.now();
+              const from = to - (intervalMs * parsedLimit * 2);
+              const polygonUrl = `https://api.polygon.io/v2/aggs/ticker/C:${symbol}/range/${multiplier}/${timespan}/${from}/${to}?adjusted=true&sort=desc&limit=${parsedLimit}&apiKey=${polygonKey}`;
+              
+              const polygonRes = await fetch(polygonUrl);
+              if (polygonRes.ok) {
+                  const polygonData = await polygonRes.json();
+                  if (polygonData.results && polygonData.results.length > 0) {
+                      const list = polygonData.results.map((k: any) => [
+                          k.t.toString(),
+                          k.o.toString(),
+                          k.h.toString(),
+                          k.l.toString(),
+                          k.c.toString(),
+                          k.v.toString(),
+                          (k.v * k.c).toString()
+                      ]);
+                      GLOBAL_PRICES[symbol] = polygonData.results[0].c;
+                      return res.json({
+                          retCode: 0,
+                          retMsg: "OK",
+                          result: { category: "linear", symbol, list },
+                          retExtInfo: {},
+                          time: Date.now()
+                      });
+                  }
+              }
+          }
+
+          // Generate mock forex data
+          if (interval === "1s") intervalMs = 1000;
+
+          
+          let currentPrice = GLOBAL_PRICES[symbol as string] || 1.1370; // Use cache or fallback
+          
+                    const list = [];
           const now = Math.floor(Date.now() / intervalMs) * intervalMs;
-          for (let i = parsedLimit - 1; i >= 0; i--) {
+          for (let i = 0; i < parsedLimit; i++) {
               const time = now - (i * intervalMs);
-              const open = currentPrice;
-              const high = currentPrice + (Math.random() * 0.0010);
-              const low = currentPrice - (Math.random() * 0.0010);
-              const close = low + (Math.random() * (high - low));
-              currentPrice = close;
+              const close = currentPrice;
+              const high = close + (Math.random() * 0.0010);
+              const low = close - (Math.random() * 0.0010);
+              const open = low + (Math.random() * (high - low));
+              currentPrice = open;
               list.push([time.toString(), open.toFixed(5), high.toFixed(5), low.toFixed(5), close.toFixed(5), "1000", "100000"]);
           }
-          // Sort reverse chronologically as Bybit does
-          list.reverse();
           
           return res.json({
               retCode: 0,
@@ -809,6 +1404,33 @@ async function startServer() {
               retExtInfo: {},
               time: now
           });
+      }
+
+      if (!isForex && interval === "1s") {
+          // Use Binance for 1s data (Bybit doesn't support 1s directly for kline API)
+          const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1s&limit=${limit || 500}`;
+          const binanceRes = await fetch(binanceUrl);
+          if (binanceRes.ok) {
+              const binanceData = await binanceRes.json();
+              // Binance returns oldest to newest. Bybit returns newest to oldest.
+              const list = binanceData.map((k: any) => [
+                  k[0].toString(), // open time
+                  k[1], // open
+                  k[2], // high
+                  k[3], // low
+                  k[4], // close
+                  k[5], // volume
+                  k[7]  // quote asset volume / turnover
+              ]).reverse();
+              
+              return res.json({
+                  retCode: 0,
+                  retMsg: "OK",
+                  result: { category: category || 'spot', symbol, list },
+                  retExtInfo: {},
+                  time: Date.now()
+              });
+          }
       }
 
       const BYBIT_API_KEY = process.env.BYBIT_API_KEY;
@@ -872,24 +1494,23 @@ async function startServer() {
       if (interval === "60") intervalMs = 3600000;
       if (interval === "D") intervalMs = 86400000;
       
-      let currentPrice = 65000.00;
-      if (typeof symbol === 'string') {
+      let currentPrice = GLOBAL_PRICES[symbol as string] || 65000.00;
+      if (typeof symbol === 'string' && !GLOBAL_PRICES[symbol as string]) {
           if (symbol.includes("ETH")) currentPrice = 3500.00;
           if (symbol.includes("SOL")) currentPrice = 140.00;
       }
       
       const list = [];
       const now = Math.floor(Date.now() / intervalMs) * intervalMs;
-      for (let i = parsedLimit - 1; i >= 0; i--) {
+      for (let i = 0; i < parsedLimit; i++) {
           const time = now - (i * intervalMs);
-          const open = currentPrice;
-          const high = currentPrice + (Math.random() * currentPrice * 0.001);
-          const low = currentPrice - (Math.random() * currentPrice * 0.001);
-          const close = low + (Math.random() * (high - low));
-          currentPrice = close;
+          const close = currentPrice;
+          const high = close + (Math.random() * close * 0.001);
+          const low = close - (Math.random() * close * 0.001);
+          const open = low + (Math.random() * (high - low));
+          currentPrice = open;
           list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "100", "1000000"]);
       }
-      list.reverse();
       
       res.json({
           retCode: 0,
@@ -915,6 +1536,198 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Auto-Trading Engine
+  // --- Start Position Management Engine ---
+  const managePositionsEngine = async () => {
+      try {
+          // Use GLOBAL_PRICES directly so forex and crypto are supported identically
+          const priceMap = GLOBAL_PRICES;
+
+          GLOBAL_POSITIONS.forEach(pos => {
+              if (pos.status === "OPEN") {
+                  let currentPrice = priceMap[pos.symbol];
+                  
+                  // if not in global prices, we might need a fallback, but updatePrices should have it
+                  if (currentPrice) {
+                      pos.current_mark_price = currentPrice;
+                      
+                      const pnl = pos.side === 'BUY' 
+                          ? (currentPrice - pos.entry_price) * pos.quantity 
+                          : (pos.entry_price - currentPrice) * pos.quantity;
+                      pos.unrealized_pnl = +(pnl).toFixed(2);
+
+                      let shouldClose = false;
+                      let closeReason = "";
+
+                      // Check TP
+                      if (pos.take_profit) {
+                          const hitTp = pos.side === "BUY" ? currentPrice >= pos.take_profit : currentPrice <= pos.take_profit;
+                          if (hitTp) {
+                              shouldClose = true;
+                              closeReason = "TP";
+                          }
+                      }
+
+                      // Check SL
+                      if (pos.stop_loss && !shouldClose) {
+                          const hitSl = pos.side === "BUY" ? currentPrice <= pos.stop_loss : currentPrice >= pos.stop_loss;
+                          if (hitSl) {
+                              shouldClose = true;
+                              closeReason = "SL";
+                          }
+                      }
+
+                      // Check AutoTrade Profit Threshold (only if auto trade active and pos is LIVE)
+                      if (!shouldClose && riskSettings.autoTrade.active && pos.account_mode === "LIVE") {
+                           if (pnl >= riskSettings.autoTrade.min_profit_threshold) {
+                               shouldClose = true;
+                               closeReason = "AutoTrade Profit Threshold";
+                           }
+                      }
+
+                      if (shouldClose) {
+                          console.log(`System: Closing position ${pos.id} for ${pos.symbol} due to ${closeReason}. PnL: ${pnl}`);
+                          pos.status = "CLOSED";
+                          pos.closed_at = new Date().toISOString();
+                          pos.realized_pnl = parseFloat(pnl.toFixed(2));
+                          if (pos.account_mode === "LIVE") {
+                              liveBalance += pos.realized_pnl;
+                          } else {
+                              demoBalance += pos.realized_pnl;
+                          }
+                          
+                          if (db) {
+                              const updateData = pos.account_mode === "LIVE" ? { liveBalance } : { demoBalance };
+                              setDoc(doc(db, "system", "balances"), updateData, { merge: true }).catch(console.error);
+                          }
+                          saveTrades();
+                      }
+                  }
+              }
+          });
+      } catch (e) {
+          console.error("Position management engine error:", e);
+      }
+  };
+
+  setInterval(managePositionsEngine, 3000);
+
+  const runAutoTrade = async () => {
+      if (agentState.status !== "RUNNING") return;
+      
+      agentState.current_activity = "SEARCHING";
+      
+      // Add random search delay: 5s to 1min
+      const delay = Math.floor(Math.random() * (60000 - 5000 + 1) + 5000);
+      console.log(`Auto-trading: Searching for trades (delay: ${delay}ms)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      if (agentState.status !== "RUNNING") return; // Re-check after delay
+      
+      console.log("Auto-trade engine loop active...");
+      const apiKey = process.env.NVIDIA_API_KEY;
+
+      const symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
+      
+      try {
+          // Use GLOBAL_PRICES
+          const prices = GLOBAL_PRICES;
+
+          // Scan for new trades
+          const symbol = symbols[Math.floor(Math.random() * symbols.length)];
+          const hasOpenPos = GLOBAL_POSITIONS.some(p => p.symbol === symbol && p.status === "OPEN" && p.account_mode === "LIVE");
+          
+          if (!hasOpenPos && apiKey && prices[symbol]) {
+              agentState.current_activity = "ANALYZING";
+              // 1. Fetch Finnhub sentiment
+              const newsRes = await fetch(`http://localhost:${PORT}/api/ai/finnhub-news`);
+              const news = await newsRes.json();
+              const newsSentiment = news.length > 0 ? 0.5 : 0; // Simplified sentiment
+
+              // 2. Ask NVIDIA AI
+              console.log(`Auto-trading: Asking NVIDIA AI about ${symbol}`);
+              const aiRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${apiKey}`
+                  },
+                  body: JSON.stringify({
+                      model: "meta/llama-3.1-70b-instruct",
+                      messages: [{
+                          role: "user",
+                          content: `The current price of ${symbol} is ${prices[symbol]}. News Sentiment: ${newsSentiment}. Should I BUY or SELL for a quick scalp trade? Respond with a JSON object like {"action": "BUY", "confidence": 90} or {"action": "HOLD", "confidence": 0}.`
+                      }],
+                      max_tokens: 100,
+                      temperature: 0.2
+                  })
+              });
+
+              if (aiRes.ok) {
+                  const data = await aiRes.json();
+                  const reply = data.choices[0].message.content;
+                  let decision: any = { action: "HOLD" };
+                  try {
+                      // Extract JSON if it's wrapped in text
+                      const match = reply.match(/\{.*\}/s);
+                      if (match) {
+                          decision = JSON.parse(match[0]);
+                      }
+                  } catch (e) {
+                      console.error("Failed to parse NVIDIA AI response:", reply);
+                  }
+
+                  if ((decision.action === "BUY" || decision.action === "SELL") && decision.confidence > 70) {
+                      agentState.current_activity = "EXECUTING";
+                      const entryPrice = prices[symbol];
+                      
+                      const tradeAmount = riskSettings.default_trade_amount;
+                      if (tradeAmount > liveBalance) {
+                          console.warn("Trade amount exceeds live balance, skipping trade.");
+                          agentState.current_activity = "SEARCHING";
+                          setTimeout(runAutoTrade, 5000);
+                          return;
+                      }
+
+                      console.log(`Auto-trading: Placing ${decision.action} order for ${symbol} at ${entryPrice} with amount $${tradeAmount}`);
+                      
+                      const position = {
+                          id: `live_pos_${nextPosId++}`,
+                          account_mode: "LIVE",
+                          broker: "BYBIT",
+                          symbol: symbol,
+                          side: decision.action,
+                          quantity: tradeAmount / entryPrice,
+                          entry_price: entryPrice,
+                          current_mark_price: entryPrice,
+                          stop_loss: decision.action === "BUY" 
+                              ? entryPrice * (1 - riskSettings.autoTrade.sl_threshold_pct)
+                              : entryPrice * (1 + riskSettings.autoTrade.sl_threshold_pct),
+                          take_profit: decision.action === "BUY"
+                              ? entryPrice * (1 + riskSettings.autoTrade.tp_threshold_pct)
+                              : entryPrice * (1 - riskSettings.autoTrade.tp_threshold_pct),
+                          unrealized_pnl: 0.00,
+                          ai_confidence_score: decision.confidence,
+                          status: "OPEN",
+                          opened_at: new Date().toISOString()
+                      };
+                      GLOBAL_POSITIONS.push(position); 
+                      saveTrades();
+                  }
+              } else {
+                  console.error("NVIDIA API error:", await aiRes.text());
+              }
+          }
+      } catch (err) {
+          console.error("Auto-trade engine error:", err);
+      }
+      agentState.current_activity = "SEARCHING";
+      setTimeout(runAutoTrade, 5000); // Wait 5s before next loop
+  };
+
+  runAutoTrade();
+
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

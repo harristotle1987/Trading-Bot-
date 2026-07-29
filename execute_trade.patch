@@ -1,0 +1,38 @@
+--- server.ts
++++ server.ts
+@@ -737,6 +737,34 @@
+     }
+   });
+ 
++  app.post("/api/trades/execute", express.json(), async (req, res) => {
++    const { symbol, side, capital, execution_price, account_mode } = req.body;
++    if (account_mode === "DEMO") {
++        if (demoBalance < capital) {
++            return res.status(400).json({ error: "Insufficient balance" });
++        }
++        demoBalance -= capital;
++        if (db) setDoc(doc(db, "system", "balances"), { demoBalance }, { merge: true }).catch(console.error);
++    } else {
++        return res.status(400).json({ error: "Live mode not supported for this endpoint yet" });
++    }
++    
++    const position = {
++        id: "demo_pos_" + nextPosId++,
++        account_mode,
++        broker: "BUNKER",
++        symbol,
++        side,
++        quantity: capital / execution_price,
++        entry_price: execution_price,
++        current_mark_price: execution_price,
++        unrealized_pnl: 0,
++        realized_pnl: 0,
++        status: "OPEN",
++        opened_at: new Date().toISOString()
++    };
++    GLOBAL_POSITIONS.push(position);
++    saveTrades();
++    res.json({ message: "Trade executed successfully", position });
++  });
++
+   app.post("/api/trades/close", express.json(), async (req, res) => {

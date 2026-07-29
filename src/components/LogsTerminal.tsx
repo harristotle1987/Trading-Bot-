@@ -15,7 +15,7 @@ export default function LogsTerminal() {
         const data = await res.json();
         setLogs(data.logs || []);
       } catch (err) {
-        console.error("Failed to fetch logs", err);
+        console.warn("Failed to fetch logs", err);
       }
     };
     fetchLogs();

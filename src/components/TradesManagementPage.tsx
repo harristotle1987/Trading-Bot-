@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+import { formatPrice } from "../utils";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 interface Position {
   id: string;
@@ -18,7 +25,7 @@ interface Position {
   opened_at: string;
 }
 
-export default function TradesManagementPage() {
+export default function TradesManagementPage({ onNavigateToChart }: { onNavigateToChart?: (symbol: string) => void }) {
   const [positions, setPositions] = useState<Position[]>([]);
   const [filterMode, setFilterMode] = useState<"ALL" | "DEMO" | "LIVE">("ALL");
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -27,13 +34,13 @@ export default function TradesManagementPage() {
     try {
       const res = await fetch("/api/trades/active");
       if (!res.ok) {
-        console.error("API Error:", res.status, await res.text());
+        console.warn("API Error:", res.status, await res.text());
         return;
       }
       const data = await res.json();
       setPositions(data || []);
     } catch (err) {
-      console.error("Error fetching trades:", err);
+      console.warn("Error fetching trades:", err);
     } finally {
       setIsLoading(false);
     }
@@ -41,18 +48,26 @@ export default function TradesManagementPage() {
 
   const handleClosePosition = async (id: string, mode: "DEMO" | "LIVE") => {
     console.log("Attempting to close position:", id, mode);
-    if (!confirm(`Are you sure you want to close position ${id}?`)) return;
     try {
       const res = await fetch("/api/trades/close", {
-        method: "DELETE",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ position_id: id, account_mode: mode }),
+        body: JSON.stringify({ 
+            position_id: id, 
+            account_mode: mode,
+            exit_price: positions.find(p => p.id === id)?.current_mark_price || 0
+        }),
       });
       console.log("Close response status:", res.status);
       const data = await res.json();
       console.log("Close response data:", data);
-      toast.success(`[${mode}] Trade Closed! Realized PnL: $${data.realized_pnl}`);
-      fetchPositions(); // Refresh trades list instantly
+      if (res.ok) {
+          toast.success(`[${mode}] Trade Closed! Realized PnL: $${data.realized_pnl}`);
+          await fetchPositions(); // Refresh trades list instantly
+          window.dispatchEvent(new Event("balance_updated"));
+      } else {
+          toast.error(`Failed to close position: ${data.message || data.error}`);
+      }
     } catch (err: any) {
       toast.error(`Failed to close position: ${err.message}`);
       console.error("Failed to close position:", err);
@@ -60,9 +75,30 @@ export default function TradesManagementPage() {
   };
 
   useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+        const tradesRef = doc(db, "system", "trades");
+        unsubscribe = onSnapshot(tradesRef, (docSnap) => {
+            if (docSnap.exists()) {
+                // We'll also poll continuously so price/PnL updates show up
+            }
+            setIsLoading(false);
+        });
+    } catch (err) {
+        console.error("Firebase sync error:", err);
+    }
+    
+    // Always poll to get real-time price & PnL updates from server since Firebase is only updated on close
     fetchPositions();
-    const interval = setInterval(fetchPositions, 3000); // Poll live mark prices every 3s
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchPositions, 2000);
+    
+    const oldUnsubscribe = unsubscribe;
+    unsubscribe = () => {
+        oldUnsubscribe();
+        clearInterval(interval);
+    };
+    
+    return () => unsubscribe();
   }, []);
 
   const filteredPositions = positions.filter(
@@ -72,9 +108,9 @@ export default function TradesManagementPage() {
   const totalPnL = filteredPositions.reduce((acc, p) => acc + p.unrealized_pnl, 0);
 
   return (
-    <div className="bg-[#0B0C10] text-[#E0E0E0] p-3 md:p-8 font-sans rounded-lg border-2 border-[#1F2833] shadow-2xl h-full flex flex-col">
+    <div className="trades-management-container bg-[#0B0C10] text-[#E0E0E0] p-3 md:p-6 lg:p-0 font-sans rounded-lg lg:rounded-none border-2 lg:border-none border-[#1F2833] shadow-2xl h-full flex flex-col">
       {/* Header Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b-2 border-[#1F2833] pb-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b-2 border-[#1F2833] pb-4 lg:px-8 lg:pt-8">
         <div>
           <h1 className="text-xl md:text-2xl font-bold font-mono tracking-widest uppercase text-white flex items-center gap-3">
             <span>LIVE TRADES MANAGEMENT</span>
@@ -128,27 +164,32 @@ export default function TradesManagementPage() {
           <div>No active open trades found. Execute a trade from the <span className="text-[#3DDBD9] font-bold">Charts</span> section to monitor it here.</div>
         </div>
       ) : (
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto min-h-0 lg:px-8 lg:pb-8">
           {/* Desktop Table View (Hidden on mobile) */}
-          <div className="hidden md:block overflow-x-auto bg-[#12161D] border-2 border-[#1F2833] rounded-lg">
-            <table className="w-full text-left font-mono text-xs">
+          <div className="hidden md:block overflow-x-auto bg-[#12161D] border-2 lg:border-x-0 lg:border-y-2 lg:rounded-none border-[#1F2833] rounded-lg w-full">
+            <table className="w-full text-left font-mono text-xs whitespace-nowrap">
               <thead className="bg-[#0B0C10] border-b-2 border-[#1F2833] text-[#838C9C] uppercase text-[10px] tracking-wider font-bold">
                 <tr>
                   <th className="p-4">Mode</th>
                   <th className="p-4">Symbol</th>
                   <th className="p-4">Side</th>
                   <th className="p-4">Qty</th>
+                  <th className="p-4">Amount</th>
                   <th className="p-4">Entry</th>
                   <th className="p-4">Mark Price</th>
                   <th className="p-4">SL / TP</th>
                   <th className="p-4">NVIDIA AI Score</th>
                   <th className="p-4">Unrealized PnL</th>
-                  <th className="p-4 text-right">Action</th>
+                  <th className="p-4 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y-2 divide-[#1F2833]">
                 {filteredPositions.map((p) => (
-                  <tr key={p.id} className="hover:bg-[#1A1A22] transition-colors group">
+                  <tr 
+                    key={p.id} 
+                    className="hover:bg-[#1A1A22] transition-colors group cursor-pointer"
+                    onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
+                  >
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${
@@ -167,10 +208,11 @@ export default function TradesManagementPage() {
                       </span>
                     </td>
                     <td className="p-4 text-[#E6E9EF] font-bold">{p.quantity}</td>
-                    <td className="p-4 text-[#838C9C]">${p.entry_price}</td>
-                    <td className="p-4 text-white font-bold bg-[#0B0C10]/50">${p.current_mark_price}</td>
+                    <td className="p-4 text-[#838C9C] font-mono">${(p.quantity * p.entry_price).toFixed(2)}</td>
+                    <td className="p-4 text-[#838C9C]">${formatPrice(p.entry_price)}</td>
+                    <td className="p-4 text-white font-bold bg-[#0B0C10]/50">${formatPrice(p.current_mark_price)}</td>
                     <td className="p-4 text-[#838C9C]">
-                      <span className="text-[#FF1744]/80 font-bold">${p.stop_loss || '0.00'}</span> / <span className="text-[#00E676]/80 font-bold">${p.take_profit || '0.00'}</span>
+                      <span className="text-[#FF1744]/80 font-bold">${formatPrice(p.stop_loss || 0)}</span> / <span className="text-[#00E676]/80 font-bold">${formatPrice(p.take_profit || 0)}</span>
                     </td>
                     <td className="p-4 text-[#FFD600] font-bold">{p.ai_confidence_score || 'N/A'}%</td>
                     <td className={`p-4 font-bold text-sm bg-[#0B0C10]/50 ${p.unrealized_pnl >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}`}>
@@ -178,10 +220,13 @@ export default function TradesManagementPage() {
                     </td>
                     <td className="p-4 text-right">
                       <button
-                        onClick={() => handleClosePosition(p.id, p.account_mode)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleClosePosition(p.id, p.account_mode);
+                        }}
                         className="px-4 py-2 bg-[#1F2833] hover:bg-[#FF1744] text-white font-bold rounded text-[11px] transition-colors border border-[#1F2833] hover:border-[#FF1744] group-hover:shadow-[0_0_10px_rgba(255,23,68,0.2)] uppercase tracking-wider"
                       >
-                        Close Market
+                        CLOSE MARKET
                       </button>
                     </td>
                   </tr>
@@ -193,7 +238,11 @@ export default function TradesManagementPage() {
           {/* Mobile Card Stack View (Visible only on small screens) */}
           <div className="grid grid-cols-1 gap-4 md:hidden">
             {filteredPositions.map((p) => (
-              <div key={p.id} className="bg-[#12161D] border-2 border-[#1F2833] rounded-lg p-4 space-y-3 font-mono shadow-lg">
+              <div 
+                key={p.id} 
+                className="bg-[#12161D] border-2 border-[#1F2833] rounded-lg p-4 space-y-3 font-mono shadow-lg cursor-pointer"
+                onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
+              >
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-white text-lg">{p.symbol}</span>
@@ -211,10 +260,10 @@ export default function TradesManagementPage() {
                 </div>
 
                 <div className="grid grid-cols-2 text-xs text-[#838C9C] gap-2 bg-[#0B0C10] p-3 rounded border border-[#1F2833]">
-                  <div>Entry: <span className="text-white font-bold block mt-0.5">${p.entry_price}</span></div>
-                  <div>Mark: <span className="text-white font-bold block mt-0.5">${p.current_mark_price}</span></div>
-                  <div>SL: <span className="text-[#FF1744] font-bold block mt-0.5">${p.stop_loss || '0.00'}</span></div>
-                  <div>TP: <span className="text-[#00E676] font-bold block mt-0.5">${p.take_profit || '0.00'}</span></div>
+                  <div>Entry: <span className="text-white font-bold block mt-0.5">${formatPrice(p.entry_price)}</span></div>
+                  <div>Mark: <span className="text-white font-bold block mt-0.5">${formatPrice(p.current_mark_price)}</span></div>
+                  <div>SL: <span className="text-[#FF1744] font-bold block mt-0.5">${formatPrice(p.stop_loss || 0)}</span></div>
+                  <div>TP: <span className="text-[#00E676] font-bold block mt-0.5">${formatPrice(p.take_profit || 0)}</span></div>
                 </div>
 
                 <div className="flex justify-between items-center pt-3 border-t-2 border-[#1F2833] mt-2">
@@ -225,8 +274,11 @@ export default function TradesManagementPage() {
                     </div>
                   </div>
                   <button
-                    onClick={() => handleClosePosition(p.id, p.account_mode)}
-                    className="px-4 py-2 bg-[#FF1744] hover:bg-red-600 text-white font-bold rounded text-xs transition-colors uppercase tracking-wider"
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        handleClosePosition(p.id, p.account_mode);
+                    }}
+                    className="px-6 py-3 min-w-[120px] bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 font-bold rounded-lg text-sm transition-colors uppercase tracking-wider"
                   >
                     Close
                   </button>

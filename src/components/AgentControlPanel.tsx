@@ -1,116 +1,206 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
-import OpportunityRadar from './OpportunityRadar';
-import AgentInsightPanel from './AgentInsightPanel';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import firebaseConfig from '../../firebase-applet-config.json';
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export default function AgentControlPanel() {
-  const [status, setStatus] = useState<any>({
-    status: "IDLE",
-    uptime: 0,
-    loop_latency: 0,
-    total_trades: 0,
-    session_pnl: 0.0
-  });
-
+  const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [prices, setPrices] = useState<Record<string, number>>({});
+  const wsRef = useRef<WebSocket | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchStatus = async () => {
-      try {
-        const res = await fetch('/api/agent/status');
-        const data = await res.json();
-        if (mounted) setStatus(data);
-      } catch (err) {
-        if (err instanceof TypeError) { console.warn("Agent API offline (Server restarting)"); } else { console.error("Failed to fetch agent status", err); }
-      }
-    };
-    
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 1000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, []);
-
-  const handleAction = async (endpoint: string) => {
+  const fetchSignals = async () => {
     setLoading(true);
     try {
-      const res = await fetch(endpoint, { method: 'POST' });
+      const res = await fetch('/api/agent-workspace/scan');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setStatus(data);
-      if (res.ok) toast.success(`Action executed successfully! Status: ${data.status}`);
-      else toast.error(`Failed to execute action: ${data.error || res.status}`);
+      if (data.recommended_pairs && data.recommended_pairs.length > 0) {
+        setSignals(prev => {
+          const newSignals = [...prev];
+          data.recommended_pairs.forEach((pair: any) => {
+             // Add if not already in list or handle duplicates? 
+             // We'll just add it with a unique id
+             newSignals.push({ ...pair, id: Math.random().toString(36).substr(2, 9), amount: 100 });
+          });
+          return newSignals;
+        });
+      }
+    } catch (err) {
+      toast.error("Failed to fetch signal");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSignals();
+  }, []);
+
+  // Setup WebSocket for prices
+  useEffect(() => {
+    if (signals.length === 0) return;
+    
+    // Disconnect old WS if any
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    const cryptoSignals = signals.filter(s => s.category !== "FOREX");
+    const forexSignals = signals.filter(s => s.category === "FOREX");
+
+    // Crypto via Binance WebSocket
+    if (cryptoSignals.length > 0) {
+        const symbols = Array.from(new Set(cryptoSignals.map(s => s.symbol.toLowerCase())));
+        const streams = symbols.map(s => `${s}@ticker`).join('/');
+        const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
+        
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.s && data.c) {
+            setPrices(prev => ({
+              ...prev,
+              [data.s.toUpperCase()]: parseFloat(data.c)
+            }));
+          }
+        };
+    }
+
+    // Forex via Simulated Ultra-High-Frequency (Finnhub proxy)
+    // Note: A real Finnhub token is required for wss://ws.finnhub.io
+    let forexInterval: any = null;
+    if (forexSignals.length > 0) {
+        forexInterval = setInterval(() => {
+            setPrices(prev => {
+                const updated = { ...prev };
+                forexSignals.forEach(s => {
+                    // Simulate millisecond-accurate top-of-book market values for Forex
+                    const basePrice = s.suggested_entry || 1.085;
+                    const noise = (Math.random() - 0.5) * 0.0004;
+                    updated[s.symbol] = parseFloat((basePrice + noise).toFixed(5));
+                });
+                return updated;
+            });
+        }, 300); // 300ms polling as ultra-high-frequency fallback
+    }
+
+    return () => {
+      if (wsRef.current) wsRef.current.close();
+      if (forexInterval) clearInterval(forexInterval);
+    };
+  }, [signals.length]);
+
+  const handleExecute = async (signal: any) => {
+    setLoading(true);
+    try {
+      const currentPrice = prices[signal.symbol] || 0;
+      const res = await fetch("/api/trades/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            symbol: signal.symbol,
+            side: signal.directional_bias.includes("BUY") ? "BUY" : "SELL",
+            capital: signal.amount,
+            execution_price: currentPrice,
+            account_mode: "DEMO"
+        })
+      });
+      if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error || "Failed to execute");
+      }
+      toast.success(`Trade Executed for ${signal.symbol}`);
+      setSignals(prev => prev.filter(s => s.id !== signal.id));
     } catch (err: any) {
-      toast.error(`Error executing action: ${err.message}`);
-      console.error(`Failed to execute ${endpoint}`, err);
-    }
-    setLoading(false);
-  };
-
-  const getStatusColor = () => {
-    switch (status.status) {
-      case "RUNNING": return "text-[#00E676]";
-      case "PAUSED": return "text-yellow-400";
-      case "EMERGENCY_STOP": return "text-[#FF1744]";
-      default: return "text-gray-400";
+      toast.error(`Execution failed: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getStatusBgColor = () => {
-    switch (status.status) {
-      case "RUNNING": return "bg-[#00E676]";
-      case "PAUSED": return "bg-yellow-400";
-      case "EMERGENCY_STOP": return "bg-[#FF1744]";
-      default: return "bg-gray-400";
-    }
+  const handleDiscard = (id: string) => {
+    setSignals(prev => prev.filter(s => s.id !== id));
+  };
+  
+  const updateAmount = (id: string, newAmount: number) => {
+    setSignals(prev => prev.map(s => s.id === id ? { ...s, amount: newAmount } : s));
   };
 
   return (
-    <div className="flex flex-col h-full gap-6 w-full max-w-7xl mx-auto font-mono text-[#E6E9EF]">
-      <div className="flex flex-col lg:flex-row gap-6">
-        <div className="flex-grow bg-[#0B0C10] p-6 rounded-lg border-4 border-[#1F2833] shadow-2xl flex-shrink-0">
-          <h2 className="text-2xl font-bold text-white tracking-widest uppercase border-b-2 border-[#1F2833] pb-4 mb-6">Orchestrator Control Panel</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-[#1F2833] p-4 rounded border border-[#0B0C10] shadow-inner flex items-center justify-between col-span-2">
-              <div>
-                <p className="text-sm text-[#66FCF1] uppercase mb-1">Agent Status</p>
-                <p className={`text-xl font-bold uppercase ${getStatusColor()}`}>{status.status}</p>
-              </div>
-              {status.status === "RUNNING" && (
-                <div className={`w-4 h-4 rounded-full ${getStatusBgColor()} shadow-[0_0_10px_currentColor]`} />
-              )}
-            </div>
-            
-            <div className="bg-[#1F2833] p-4 rounded border border-[#0B0C10] shadow-inner">
-              <p className="text-sm text-[#66FCF1] uppercase mb-1">Uptime (s)</p>
-              <p className="text-xl font-bold text-white">{status.uptime}</p>
-            </div>
-            
-            <div className="bg-[#1F2833] p-4 rounded border border-[#0B0C10] shadow-inner">
-              <p className="text-sm text-[#66FCF1] uppercase mb-1">Total Trades</p>
-              <p className="text-xl font-bold text-white">{status.total_trades}</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-4 items-center justify-between border-t-2 border-[#1F2833] pt-6">
-            <div className="flex gap-4">
-              <button onClick={() => handleAction('/api/agent/start')} disabled={loading || status.status === "RUNNING"} className="px-6 py-2 font-bold uppercase text-white bg-[#1F2833] border-2 border-[#00E676] hover:bg-[#00E676] hover:text-[#0B0C10] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Start</button>
-              <button onClick={() => handleAction('/api/agent/pause')} disabled={loading || status.status !== "RUNNING"} className="px-6 py-2 font-bold uppercase text-white bg-[#1F2833] border-2 border-yellow-400 hover:bg-yellow-400 hover:text-[#0B0C10] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Pause</button>
-              <button onClick={() => handleAction('/api/agent/stop')} disabled={loading || status.status === "IDLE"} className="px-6 py-2 font-bold uppercase text-white bg-[#1F2833] border-2 border-gray-400 hover:bg-gray-400 hover:text-[#0B0C10] disabled:opacity-50 disabled:cursor-not-allowed transition-colors">Stop</button>
-            </div>
-            <button onClick={() => handleAction('/api/agent/kill-switch')} disabled={loading || status.status === "EMERGENCY_STOP"} className="px-8 py-2 font-bold uppercase tracking-widest text-white border-2 border-[#FF1744] hover:bg-[#FF1744] shadow-[0_0_15px_rgba(255,23,68,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition-all">Emergency Kill-Switch</button>
-          </div>
-        </div>
+    <div className="flex min-h-screen w-full bg-[#0B0C10] text-[#E6E9EF] font-mono p-6 overflow-y-auto">
+      <div className="w-full max-w-4xl mx-auto flex flex-col items-center pt-10 pb-20">
+        <h1 className="text-3xl font-bold tracking-widest uppercase mb-4 text-white">Signal Bunker</h1>
+        <button 
+          onClick={fetchSignals} 
+          disabled={loading}
+          className="mb-12 px-6 py-2 border border-[#66FCF1] text-[#66FCF1] hover:bg-[#66FCF1] hover:text-[#0B0C10] uppercase tracking-widest text-sm transition-colors rounded"
+        >
+          {loading ? "Scanning..." : "Force Manual Scan"}
+        </button>
+        
+        {signals.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
+            {signals.map(signal => (
+              <div key={signal.id} className="w-full bg-[#12161D] p-6 rounded-lg border border-[#1F2833] shadow-2xl flex flex-col">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className="text-2xl font-bold text-white block">{signal.symbol}</span>
+                    <span className={`text-xl font-bold mt-1 block ${prices[signal.symbol] ? 'text-white' : 'text-[#838C9C] animate-pulse'}`}>
+                      {prices[signal.symbol] ? `$${prices[signal.symbol].toFixed(2)}` : 'Connecting WS...'}
+                    </span>
+                  </div>
+                  <span className={`text-sm px-3 py-1 rounded font-bold ${signal.directional_bias.includes("BUY") ? "bg-[#00E676] text-black" : "bg-[#FF1744] text-white"}`}>
+                    {signal.directional_bias}
+                  </span>
+                </div>
+                
+                <div className="text-sm text-[#838C9C] mb-4 flex-grow">
+                  <p className="mb-2">Confidence: <span className="text-white font-bold">{signal.win_rate_probability}%</span></p>
+                  <p className="italic">{signal.reasoning}</p>
+                </div>
 
-        <div className="w-full lg:w-1/3 min-h-0">
-          <AgentInsightPanel />
-        </div>
-      </div>
-      
-      <div className="w-full">
-        <OpportunityRadar />
+                <div className="mb-6">
+                  <label className="block text-xs uppercase text-[#66FCF1] mb-2">Capital Allocation ($)</label>
+                  <input 
+                    type="number" 
+                    value={signal.amount ?? ''} 
+                    onChange={(e) => updateAmount(signal.id, Number(e.target.value))} 
+                    className="w-full bg-[#1F2833] text-white p-3 rounded border border-transparent focus:border-[#66FCF1] outline-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <button 
+                    onClick={() => handleExecute(signal)} 
+                    disabled={loading || !prices[signal.symbol]}
+                    className="py-3 bg-[#66FCF1] text-[#0B0C10] font-bold rounded uppercase hover:bg-opacity-90 transition-colors disabled:opacity-50"
+                  >
+                    Execute Position
+                  </button>
+                  <button 
+                    onClick={() => handleDiscard(signal.id)} 
+                    className="py-3 bg-[#1F2833] text-[#FF1744] font-bold rounded uppercase hover:bg-[#1F2833] hover:text-white transition-colors border border-[#FF1744]"
+                  >
+                    Discard Signal
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-[#838C9C] flex flex-col items-center justify-center h-48 border border-dashed border-[#1F2833] rounded-lg w-full">
+            <span className="animate-pulse mb-2">Scanning market logic...</span>
+            <span className="text-xs">Awaiting setup conditions</span>
+          </div>
+        )}
       </div>
     </div>
   );

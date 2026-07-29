@@ -9,6 +9,7 @@ interface WalletMetrics {
 
 export default function TopNavbar() {
   const [activeMode, setActiveMode] = useState<"DEMO" | "LIVE">("DEMO");
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [balances, setBalances] = useState<{
     demo: WalletMetrics;
     bybit_live: WalletMetrics;
@@ -16,6 +17,18 @@ export default function TopNavbar() {
     demo: { total_equity: 10000.0, available_balance: 10000.0, currency: "USDT", status: "ONLINE" },
     bybit_live: { total_equity: 0.0, available_balance: 0.0, currency: "USDT", status: "OFFLINE" },
   });
+
+  const checkAuthStatus = async () => {
+    try {
+      const res = await fetch("/api/config/keys");
+      if (res.ok) {
+        const data = await res.json();
+        setNeedsAuth(data.ctrader_needs_auth);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch auth status:", err);
+    }
+  };
 
   const fetchBalances = async () => {
     try {
@@ -25,15 +38,41 @@ export default function TopNavbar() {
         setBalances(data);
       }
     } catch (err) {
-      console.error("Failed to fetch wallet balances:", err);
+      console.warn("Failed to fetch wallet balances:", err);
     }
   };
 
   useEffect(() => {
     fetchBalances();
-    const interval = setInterval(fetchBalances, 5000); // Auto refresh cash balances every 5s
-    return () => clearInterval(interval);
+    checkAuthStatus();
+    const interval = setInterval(() => {
+        fetchBalances();
+        checkAuthStatus();
+    }, 5000); // Auto refresh cash balances every 5s
+    
+    const handleBalanceUpdated = () => fetchBalances();
+    window.addEventListener("balance_updated", handleBalanceUpdated);
+
+    // Listen for OAuth success message from popup
+    const handleMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'CTRADER_OAUTH_SUCCESS') {
+            setNeedsAuth(false);
+            // Give server a moment to reconnect, then fetch balances
+            setTimeout(fetchBalances, 2000);
+        }
+    };
+    window.addEventListener('message', handleMessage);
+
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener("balance_updated", handleBalanceUpdated);
+        window.removeEventListener('message', handleMessage);
+    };
   }, []);
+
+  const handleCTraderAuth = () => {
+      window.open("/api/ctrader/auth", "_blank", "width=600,height=800");
+  };
 
   return (
     <header className="h-[60px] border-b border-[#232833] bg-[#0B0E13] flex items-center justify-between px-8 z-30 font-sans">
@@ -45,6 +84,15 @@ export default function TopNavbar() {
       </div>
       {/* Capital & Mode Display Badges */}
       <div className="flex items-center gap-3">
+        {needsAuth && (
+          <button
+            onClick={handleCTraderAuth}
+            className="animate-pulse mr-2 cursor-pointer px-4 py-1.5 rounded border border-[#FF1744] bg-[#FF1744]/10 hover:bg-[#FF1744]/20 text-white transition-all flex items-center gap-2 font-mono text-xs"
+          >
+            <span className="w-2 h-2 rounded-full bg-[#FF1744]"></span>
+            <span className="font-bold text-[#FF1744]">cTrader Auth Required - Click Here</span>
+          </button>
+        )}
         {/* DEMO CASH BADGE */}
         <div
           onClick={() => setActiveMode("DEMO")}
