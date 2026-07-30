@@ -11,6 +11,8 @@ interface TradeSignal {
   winRate: string;
   slPrice: number;
   tpPrice: number;
+  timeframe: string;
+  reasoning: string;
 }
 
 export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: string }) {
@@ -38,7 +40,9 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
             entryPrice: p.suggested_entry,
             winRate: p.win_rate_probability + "%",
             slPrice: p.suggested_sl,
-            tpPrice: p.suggested_tp
+            tpPrice: p.suggested_tp,
+            timeframe: p.suggested_timeframe || p.timeframe || "15m",
+            reasoning: p.reasoning || "Algorithm consensus reached based on current market dynamics."
           }));
           setSignals(mappedSignals);
         } else {
@@ -151,15 +155,23 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
               return (
                 <div key={s.symbol} className="border border-[#1F2833] rounded p-3 bg-[#12161D] text-xs hover:border-[#3DDBD9] transition-colors">
                     <div className="flex justify-between items-center mb-2 border-b border-[#232833] pb-2">
-                        <div className="text-white font-bold text-sm font-mono">{s.symbol} <span className="text-[#838C9C] text-[10px]">({category})</span></div>
+                        <div className="flex items-center gap-2">
+                           <div className="text-white font-bold text-sm font-mono">{s.symbol} <span className="text-[#838C9C] text-[10px]">({category})</span></div>
+                           <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/30">TF: {s.timeframe}</span>
+                        </div>
                         <div className={`font-bold font-mono ${s.type === 'UP' ? 'text-[#00E676]' : 'text-[#FF1744]'}`}>{s.type}</div>
+                    </div>
+                    
+                    <div className="mb-3 text-[#838C9C] text-[11px] leading-relaxed italic border-b border-[#232833] pb-3">
+                        <span className="text-[#FFD600] font-bold not-italic mr-1">NVIDIA NIM:</span>
+                        {s.reasoning}
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2 text-[#838C9C] font-mono mb-2 border-b border-[#232833] pb-2">
                         <div>Entry: <span className="text-white">${s.entryPrice}</span></div>
                         <div>Win Rate: <span className="text-white">{s.winRate}</span></div>
-                        <div>SL: <span className="text-white">${s.slPrice}</span></div>
-                        <div>TP: <span className="text-white">${s.tpPrice}</span></div>
+                        <div>SL: <span className="text-[#FF1744] font-bold">${s.slPrice}</span></div>
+                        <div>TP: <span className="text-[#00E676] font-bold">${s.tpPrice}</span></div>
                     </div>
 
                     <div className="space-y-1">

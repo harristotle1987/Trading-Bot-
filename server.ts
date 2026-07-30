@@ -879,7 +879,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         unrealized_pnl: 0.00,
         ai_confidence_score: 88.5,
         status: "OPEN",
-        opened_at: new Date().toISOString()
+        opened_at: new Date().toISOString(),
+        timeframe: order.timeframe || "15m",
+        reasoning: order.reasoning || ""
     };
     GLOBAL_POSITIONS.push(position); saveTrades();
 
@@ -948,7 +950,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         unrealized_pnl: 0.00,
         ai_confidence_score: 92.5,
         status: "OPEN",
-        opened_at: new Date().toISOString()
+        opened_at: new Date().toISOString(),
+        timeframe: order.timeframe || "15m",
+        reasoning: order.reasoning || ""
     };
     GLOBAL_POSITIONS.push(position); saveTrades();
 

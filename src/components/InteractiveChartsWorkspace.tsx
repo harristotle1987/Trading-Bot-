@@ -240,6 +240,9 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           price: pair.suggested_entry,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
+          ai_confidence_score: pair.win_rate_probability,
+          timeframe: pair.suggested_timeframe || pair.timeframe || "15m",
+          reasoning: pair.reasoning || "Algorithm consensus reached based on current market dynamics."
         }),
       });
       const data = await res.json();
@@ -270,6 +273,9 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           price: pair.suggested_entry,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
+          ai_confidence_score: pair.win_rate_probability,
+          timeframe: pair.suggested_timeframe || pair.timeframe || "15m",
+          reasoning: pair.reasoning || "Algorithm consensus reached based on current market dynamics."
         }),
       });
       const data = await res.json();
