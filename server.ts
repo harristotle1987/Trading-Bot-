@@ -8,27 +8,6 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
-const logs: any[] = [];
-const originalLog = console.log;
-const originalError = console.error;
-const originalWarn = console.warn;
-
-console.log = (...args) => {
-  logs.push({ timestamp: new Date().toISOString(), level: 'INFO', module: 'SERVER', message: args.join(' ') });
-  if (logs.length > 500) logs.shift();
-  originalLog(...args);
-};
-console.error = (...args) => {
-  logs.push({ timestamp: new Date().toISOString(), level: 'ERROR', module: 'SERVER', message: args.join(' ') });
-  if (logs.length > 500) logs.shift();
-  originalError(...args);
-};
-console.warn = (...args) => {
-  logs.push({ timestamp: new Date().toISOString(), level: 'WARN', module: 'SERVER', message: args.join(' ') });
-  if (logs.length > 500) logs.shift();
-  originalWarn(...args);
-};
-
 dotenv.config();
 
 async function startServer() {
@@ -114,7 +93,25 @@ async function startServer() {
 
           if (process.env.CTRADER_ACCESS_TOKEN) {
               const token = process.env.CTRADER_ACCESS_TOKEN;
-              const accounts = await CTraderConnection.getAccessTokenAccounts(token);
+              let accounts: any[] = [];
+              try {
+                  const res = await fetch(`https://api.spotware.com/connect/tradingaccounts?access_token=${token}`);
+                  if (res.ok) {
+                      const data = await res.json();
+                      if (Array.isArray(data)) {
+                          accounts = data;
+                      } else if (data && Array.isArray(data.tradingAccounts)) {
+                          accounts = data.tradingAccounts;
+                      } else {
+                          // Try to handle unexpected shapes if any
+                          accounts = [data];
+                      }
+                  } else {
+                      console.error("Failed to fetch cTrader accounts:", res.statusText);
+                  }
+              } catch (fetchErr) {
+                  console.error("Error fetching cTrader accounts:", fetchErr);
+              }
               if (accounts && accounts.length > 0) {
                   cTraderAccountId = accounts[0].accountId;
                   await cTraderConn.sendCommand("ProtoOAAccountAuthReq", {
@@ -263,10 +260,6 @@ async function startServer() {
   
   setInterval(updatePrices, 3000); // Update every 3s
   updatePrices();
-
-  app.get("/api/system/audit-logs", (req, res) => {
-    res.json({ logs });
-  });
 
   app.get("/api/account/balances", async (req, res) => {
       console.log("Fetching balances... started");
@@ -904,9 +897,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         unrealized_pnl: 0.00,
         ai_confidence_score: 88.5,
         status: "OPEN",
-        opened_at: new Date().toISOString(),
-        timeframe: order.timeframe || "15m",
-        reasoning: order.reasoning || ""
+        opened_at: new Date().toISOString()
     };
     GLOBAL_POSITIONS.push(position); saveTrades();
 
@@ -975,9 +966,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         unrealized_pnl: 0.00,
         ai_confidence_score: 92.5,
         status: "OPEN",
-        opened_at: new Date().toISOString(),
-        timeframe: order.timeframe || "15m",
-        reasoning: order.reasoning || ""
+        opened_at: new Date().toISOString()
     };
     GLOBAL_POSITIONS.push(position); saveTrades();
 

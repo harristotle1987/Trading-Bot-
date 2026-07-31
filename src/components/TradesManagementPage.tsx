@@ -23,8 +23,6 @@ interface Position {
   ai_confidence_score: number;
   status: string;
   opened_at: string;
-  timeframe?: string;
-  reasoning?: string;
 }
 
 export default function TradesManagementPage({ onNavigateToChart }: { onNavigateToChart?: (symbol: string) => void }) {
@@ -203,21 +201,7 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                         {p.account_mode}
                       </span>
                     </td>
-                    <td className="p-4 font-bold text-white text-sm">
-                      <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                          {p.symbol}
-                          {p.timeframe && (
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/30">TF: {p.timeframe}</span>
-                          )}
-                        </div>
-                        {p.reasoning && (
-                          <div className="text-[10px] text-[#838C9C] font-normal italic max-w-xs truncate" title={p.reasoning}>
-                            {p.reasoning}
-                          </div>
-                        )}
-                      </div>
-                    </td>
+                    <td className="p-4 font-bold text-white text-sm">{p.symbol}</td>
                     <td className="p-4">
                       <span className={p.side === "BUY" ? "text-[#00E676] font-bold" : "text-[#FF1744] font-bold"}>
                         {p.side}
@@ -259,28 +243,18 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                 className="bg-[#12161D] border-2 border-[#1F2833] rounded-lg p-4 space-y-3 font-mono shadow-lg cursor-pointer"
                 onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
               >
-                <div className="flex justify-between items-start">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white text-lg">{p.symbol}</span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
-                          p.side === "BUY" ? "bg-[#00E676]/20 text-[#00E676]" : "bg-[#FF1744]/20 text-[#FF1744]"
-                        }`}
-                      >
-                        {p.side}
-                      </span>
-                      {p.timeframe && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/30">TF: {p.timeframe}</span>
-                      )}
-                    </div>
-                    {p.reasoning && (
-                      <div className="text-[10px] text-[#838C9C] italic">
-                        {p.reasoning}
-                      </div>
-                    )}
+                <div className="flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white text-lg">{p.symbol}</span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
+                        p.side === "BUY" ? "bg-[#00E676]/20 text-[#00E676]" : "bg-[#FF1744]/20 text-[#FF1744]"
+                      }`}
+                    >
+                      {p.side}
+                    </span>
                   </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold tracking-wider whitespace-nowrap ${p.account_mode === "DEMO" ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30" : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"}`}>
+                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold tracking-wider ${p.account_mode === "DEMO" ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30" : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"}`}>
                     {p.account_mode}
                   </span>
                 </div>

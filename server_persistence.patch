@@ -1,0 +1,73 @@
+--- server.ts
++++ server.ts
+@@ -2,6 +2,7 @@
+ import express from "express";
+ import path from "path";
+ import { createServer as createViteServer } from "vite";
++import fs from 'fs';
+ 
+ async function startServer() {
+   const app = express();
+@@ -40,8 +41,22 @@
+   let orders: any[] = [];
+   let positions: any[] = [];
+   let nextOrderId = 1;
+-  const GLOBAL_POSITIONS: any[] = [];
++  let GLOBAL_POSITIONS: any[] = [];
+   let nextPosId = 1;
++
++  const DB_FILE = path.join(process.cwd(), 'trades_db.json');
++  if (fs.existsSync(DB_FILE)) {
++      try {
++          const data = fs.readFileSync(DB_FILE, 'utf-8');
++          GLOBAL_POSITIONS = JSON.parse(data);
++          nextPosId = GLOBAL_POSITIONS.length + 1;
++      } catch(e) {}
++  }
++
++  const saveTrades = () => {
++      fs.writeFileSync(DB_FILE, JSON.stringify(GLOBAL_POSITIONS, null, 2));
++  };
+ 
+   app.get("/api/execution/positions", (req, res) => {
+     res.json({ positions });
+@@ -88,6 +103,7 @@
+         opened_at: new Date().toISOString()
+     };
+     GLOBAL_POSITIONS.push(unifiedPos);
++    saveTrades();
+ 
+     res.json({ status: "success", order });
+   });
+@@ -102,6 +118,7 @@
+     if (pos) {
+         pos.status = "CLOSED";
+         pos.closed_at = new Date().toISOString();
++        saveTrades();
+     }
+     
+     res.json({ status: "success" });
+@@ -382,6 +399,7 @@
+         opened_at: new Date().toISOString()
+     };
+     GLOBAL_POSITIONS.push(position);
++    saveTrades();
+ 
+     res.json({
+         status: "SUCCESS",
+@@ -420,6 +438,7 @@
+         p.status = "CLOSED";
+         p.closed_at = new Date().toISOString();
+     });
++    saveTrades();
+     res.json({ status: "SUCCESS", closed_count: GLOBAL_POSITIONS.length });
+   });
+ 
+@@ -433,6 +452,7 @@
+     if (pos) {
+         pos.status = "CLOSED";
+         pos.closed_at = new Date().toISOString();
++        saveTrades();
+         res.json({ status: "SUCCESS", position: pos });
+     } else {
+         res.status(404).json({ error: "Position not found or not OPEN" });

@@ -1,0 +1,23 @@
+-- Unified Positions & Trades Table (Supports both DEMO and LIVE cTrader/Bybit accounts)
+CREATE TABLE IF NOT EXISTS positions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    account_mode VARCHAR(10) NOT NULL DEFAULT 'DEMO', -- 'DEMO' or 'LIVE'
+    broker VARCHAR(20) NOT NULL DEFAULT 'CTRADER',   -- 'CTRADER' or 'BYBIT'
+    symbol VARCHAR(20) NOT NULL,
+    side VARCHAR(10) NOT NULL,                        -- 'BUY' or 'SELL'
+    quantity NUMERIC(18, 8) NOT NULL,
+    entry_price NUMERIC(18, 8) NOT NULL,
+    current_mark_price NUMERIC(18, 8) NOT NULL,
+    stop_loss NUMERIC(18, 8),
+    take_profit NUMERIC(18, 8),
+    unrealized_pnl NUMERIC(18, 8) DEFAULT 0.0,
+    realized_pnl NUMERIC(18, 8) DEFAULT 0.0,
+    ai_confidence_score NUMERIC(5, 2),                -- Ingested from NVIDIA AI Engine
+    ai_reasoning TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'OPEN',       -- 'OPEN', 'CLOSED', 'CANCELLED'
+    opened_at TIMESTAMPTZ DEFAULT NOW(),
+    closed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_positions_mode_status ON positions(account_mode, status);
+CREATE INDEX IF NOT EXISTS idx_positions_symbol ON positions(symbol);

@@ -10,7 +10,6 @@ interface RecommendedPair {
   directional_bias: string;
   win_rate_probability: number;
   timeframe: string;
-  suggested_timeframe?: string;
   reasoning: string;
   suggested_entry: number;
   suggested_sl: number;
@@ -241,9 +240,6 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           price: pair.suggested_entry,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
-          ai_confidence_score: pair.win_rate_probability,
-          timeframe: pair.suggested_timeframe || pair.timeframe || "15m",
-          reasoning: pair.reasoning || "Algorithm consensus reached based on current market dynamics."
         }),
       });
       const data = await res.json();
@@ -274,9 +270,6 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           price: pair.suggested_entry,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
-          ai_confidence_score: pair.win_rate_probability,
-          timeframe: pair.suggested_timeframe || pair.timeframe || "15m",
-          reasoning: pair.reasoning || "Algorithm consensus reached based on current market dynamics."
         }),
       });
       const data = await res.json();
@@ -740,11 +733,6 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
                       <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#1F2833] text-[#838C9C] font-bold">
                         {item.category}
                       </span>
-                      {item.suggested_timeframe && (
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#FFD600]/10 text-[#FFD600] border border-[#FFD600]/30 font-bold">
-                          TF: {item.suggested_timeframe}
-                        </span>
-                      )}
                     </div>
                     {/* Win Rate Badge */}
                     <div className="text-right">
@@ -754,10 +742,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
                     </div>
                   </div>
 
-                  <p className="text-xs text-[#838C9C] mb-3 leading-relaxed">
-                    <span className="text-[#FFD600] font-bold not-italic mr-1">NVIDIA NIM:</span>
-                    {item.reasoning}
-                  </p>
+                  <p className="text-xs text-[#838C9C] mb-3 leading-relaxed">{item.reasoning}</p>
 
                   <div className="grid grid-cols-3 text-[11px] font-mono text-gray-400 bg-[#12161D] p-2 rounded-md mb-3 border border-[#1F2833]">
                     <div>Entry: <span className="text-white block mt-0.5 font-bold">${formatPrice(item.suggested_entry)}</span></div>

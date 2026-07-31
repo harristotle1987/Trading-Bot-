@@ -3,30 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
 export default function RiskSettings() {
-  const [activeTab, setActiveTab] = useState<'RISK' | 'REBALANCE' | 'HEALTH' | 'AUTO' | 'LOGS'>('RISK');
-  const [logs, setLogs] = useState<any[]>([]);
-
-  useEffect(() => {
-    const fetchLogs = async () => {
-        try {
-          const res = await fetch('/api/system/audit-logs');
-          const data = await res.json();
-          setLogs(data.logs || []);
-        } catch (err) {
-          console.warn("Failed to fetch logs", err);
-        }
-    };
-    fetchLogs();
-    const interval = setInterval(fetchLogs, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const getLogColor = (level: string) => {
-    if (level === 'INFO') return 'text-[#838C9C]';
-    if (level === 'WARN') return 'text-[#FFD600]';
-    if (level === 'CRITICAL' || level === 'ERROR') return 'text-[#FF1744]';
-    return 'text-[#E6E9EF]';
-  };
+  const [activeTab, setActiveTab] = useState<'RISK' | 'REBALANCE' | 'HEALTH' | 'AUTO'>('RISK');
   
   const [autoTrade, setAutoTrade] = useState({
       active: false,
@@ -215,12 +192,6 @@ export default function RiskSettings() {
             >
                 Auto-Trade
             </button>
-            <button 
-                onClick={() => setActiveTab('LOGS')} 
-                className={`px-4 py-2 uppercase font-bold text-sm transition-colors whitespace-nowrap ${activeTab === 'LOGS' ? 'text-[#3DDBD9] border-b-2 border-[#3DDBD9]' : 'text-[#838C9C] hover:text-white'}`}
-            >
-                Logs
-            </button>
         </div>
 
         <div className="space-y-6">
@@ -381,22 +352,6 @@ export default function RiskSettings() {
                     )}
                 </div>
             )}
-            {activeTab === 'LOGS' && (
-                <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                    {logs.length === 0 ? (
-                        <div className="text-[#838C9C] text-sm italic">No logs available.</div>
-                    ) : (
-                        logs.map((log, i) => (
-                            <div key={i} className="bg-[#12161D] p-2 rounded border border-[#1F2833] text-[10px] flex gap-2">
-                                <span className="text-[#838C9C] whitespace-nowrap">{log.timestamp?.split('T')[1]?.split('Z')[0] || log.timestamp}</span>
-                                <span className={`font-bold ${getLogColor(log.level)}`}>[{log.level}]</span>
-                                <span className="text-[#3DDBD9] whitespace-nowrap">{log.module}</span>
-                                <span className="text-[#E6E9EF] break-all">{log.message}</span>
-                            </div>
-                        )).reverse()
-                    )}
-                </div>
-            )}
             {activeTab === 'AUTO' && (
                 <div className="space-y-6">
                     {autoTrade.active && (
@@ -446,22 +401,6 @@ export default function RiskSettings() {
                         <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">Max Daily Loss Limit ($)</label>
                         <input type="number" name="max_daily_loss" value={autoTrade.max_daily_loss} onChange={handleAutoTradeChange} className="w-full bg-[#12161D] border-2 border-[#1F2833] rounded px-4 py-2 text-sm focus:outline-none focus:border-[#3DDBD9] transition-colors font-mono" step="10" />
                     </div>
-                </div>
-            )}
-            {activeTab === 'LOGS' && (
-                <div className="space-y-4 max-h-[400px] overflow-y-auto">
-                    {logs.length === 0 ? (
-                        <div className="text-[#838C9C] text-sm italic">No logs available.</div>
-                    ) : (
-                        logs.map((log, i) => (
-                            <div key={i} className="bg-[#12161D] p-2 rounded border border-[#1F2833] text-[10px] flex gap-2">
-                                <span className="text-[#838C9C] whitespace-nowrap">{log.timestamp.split('T')[1].split('Z')[0]}</span>
-                                <span className={`font-bold ${getLogColor(log.level)}`}>[{log.level}]</span>
-                                <span className="text-[#3DDBD9] whitespace-nowrap">{log.module}</span>
-                                <span className="text-[#E6E9EF] break-all">{log.message}</span>
-                            </div>
-                        )).reverse()
-                    )}
                 </div>
             )}
         </div>
