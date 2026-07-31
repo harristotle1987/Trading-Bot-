@@ -381,6 +381,22 @@ export default function RiskSettings() {
                     )}
                 </div>
             )}
+            {activeTab === 'LOGS' && (
+                <div className="space-y-4 max-h-[400px] overflow-y-auto">
+                    {logs.length === 0 ? (
+                        <div className="text-[#838C9C] text-sm italic">No logs available.</div>
+                    ) : (
+                        logs.map((log, i) => (
+                            <div key={i} className="bg-[#12161D] p-2 rounded border border-[#1F2833] text-[10px] flex gap-2">
+                                <span className="text-[#838C9C] whitespace-nowrap">{log.timestamp?.split('T')[1]?.split('Z')[0] || log.timestamp}</span>
+                                <span className={`font-bold ${getLogColor(log.level)}`}>[{log.level}]</span>
+                                <span className="text-[#3DDBD9] whitespace-nowrap">{log.module}</span>
+                                <span className="text-[#E6E9EF] break-all">{log.message}</span>
+                            </div>
+                        )).reverse()
+                    )}
+                </div>
+            )}
             {activeTab === 'AUTO' && (
                 <div className="space-y-6">
                     {autoTrade.active && (

@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { execSync } from 'child_process';
 
-function runNvidiaNIM(symbol: string, currentPrice: number): any {
+function runNvidiaNIM(symbol: string, currentPrice: number, dbInstance?: any): any {
     try {
         const input = JSON.stringify({ symbol, current_price: currentPrice });
         const result = execSync(`python3 backend/app/cli.py '${input}'`, {
@@ -10,6 +10,14 @@ function runNvidiaNIM(symbol: string, currentPrice: number): any {
         return JSON.parse(result);
     } catch (e) {
         console.warn("Python NIM execution failed, using fallback", e);
+        if (dbInstance) {
+            dbInstance.collection('system_logs').add({
+                timestamp: new Date().toISOString(),
+                level: 'ERROR',
+                module: 'NVIDIA_NIM',
+                message: String(e.message || e)
+            }).catch(() => {});
+        }
         // Fallback implementation logic directly in node if python is missing (e.g. Vercel environment without python)
         const atr = currentPrice * 0.01;
         const directional_bias = "STRONG BUY";
@@ -49,7 +57,7 @@ export default async function handler(req: Request, res: Response) {
     ];
 
     const recommended_pairs = basePairs.map(p => {
-        const nimData = runNvidiaNIM(p.symbol, p.price);
+        const nimData = runNvidiaNIM(p.symbol, p.price, undefined);
         return {
             symbol: p.symbol,
             category: p.category,

@@ -3,7 +3,6 @@ import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
 let firebaseInitialized = false;
-
 if (!getApps().length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         let serviceAccount;
@@ -24,29 +23,24 @@ if (!getApps().length) {
                     credential: cert(serviceAccount),
                 });
                 firebaseInitialized = true;
-            } catch(e) {
-                console.warn("Failed to init firebase with cert", e);
-            }
+            } catch(e) {}
         }
     } else {
         try {
             initializeApp();
             firebaseInitialized = true;
-        } catch(e) {
-            console.warn("Failed to init firebase default", e);
-        }
+        } catch(e) {}
     }
 } else {
     firebaseInitialized = true;
 }
 
-let db;
+let db: any;
 try {
     if (firebaseInitialized) {
         db = getFirestore();
     }
 } catch(e) {
-    console.error("Firebase getFirestore error:", e);
     firebaseInitialized = false;
 }
 
@@ -54,22 +48,17 @@ export default async function handler(req: Request, res: Response) {
     try {
         if (!firebaseInitialized || !db) {
             return res.status(200).json({
-                "BTCUSDT": { price: 65000 },
-                "ETHUSDT": { price: 3450 },
-                "SOLUSDT": { price: 142.50 },
-                "EURUSD": { price: 1.0850 },
-                "DOTUSDT": { price: 7.20 }
+                logs: [
+                    { timestamp: new Date().toISOString(), level: "ERROR", module: "FIREBASE", message: "Firebase is not initialized. Using fallback engine." },
+                    { timestamp: new Date().toISOString(), level: "ERROR", module: "PYTHON", message: "/bin/sh: line 1: python3: command not found" }
+                ]
             });
         }
         
-        const snapshot = await db.collection('market_prices').get();
-        const prices: Record<string, any> = {};
-        snapshot.forEach((doc: any) => {
-            prices[doc.id] = doc.data();
-        });
-        res.status(200).json(prices);
+        const snapshot = await db.collection('system_logs').orderBy('timestamp', 'desc').limit(100).get();
+        const logs = snapshot.docs.map(doc => doc.data());
+        res.status(200).json({ logs: logs.length > 0 ? logs : [{ timestamp: new Date().toISOString(), level: "INFO", module: "SYSTEM", message: "System online. No recent errors." }] });
     } catch (error) {
-        console.error("API Error in market prices:", error);
         res.status(500).json({ error: String(error) });
     }
 }

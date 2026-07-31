@@ -42,15 +42,21 @@ if (!getApps().length) {
     firebaseInitialized = true;
 }
 
-const db = getFirestore();
+
+let db;
+try {
+    if (firebaseInitialized) {
+        db = getFirestore();
+    }
+} catch(e) {
+    console.error("Firebase getFirestore error:", e);
+    firebaseInitialized = false;
+}
+
 
 export default async function handler(req: Request, res: Response) {
   try {
-    // Assuming a collection 'user_accounts' and a document for the user
-    // For now, using a static doc ID 'demo' for demonstration
-    const docRef = db.collection('user_accounts').doc('demo');
-    
-    if (!firebaseInitialized) {
+    if (!firebaseInitialized || !db) {
         return res.status(200).json({
             "demo": {
                 "total_equity": 11412.02,
@@ -66,13 +72,14 @@ export default async function handler(req: Request, res: Response) {
             }
         });
     }
+    const docRef = db.collection('user_accounts').doc('demo');
     const doc = await docRef.get();
     if (!doc.exists) {
         return res.status(404).json({ error: "Account not found" });
     }
     res.status(200).json(doc.data());
-    
   } catch (error) {
-    res.status(500).json({ error: "Internal server error" });
+    console.error("API Error in balances:", error);
+    res.status(500).json({ error: String(error) });
   }
 }
