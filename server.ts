@@ -8,6 +8,27 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
+const logs: any[] = [];
+const originalLog = console.log;
+const originalError = console.error;
+const originalWarn = console.warn;
+
+console.log = (...args) => {
+  logs.push({ timestamp: new Date().toISOString(), level: 'INFO', module: 'SERVER', message: args.join(' ') });
+  if (logs.length > 500) logs.shift();
+  originalLog(...args);
+};
+console.error = (...args) => {
+  logs.push({ timestamp: new Date().toISOString(), level: 'ERROR', module: 'SERVER', message: args.join(' ') });
+  if (logs.length > 500) logs.shift();
+  originalError(...args);
+};
+console.warn = (...args) => {
+  logs.push({ timestamp: new Date().toISOString(), level: 'WARN', module: 'SERVER', message: args.join(' ') });
+  if (logs.length > 500) logs.shift();
+  originalWarn(...args);
+};
+
 dotenv.config();
 
 async function startServer() {
@@ -242,6 +263,10 @@ async function startServer() {
   
   setInterval(updatePrices, 3000); // Update every 3s
   updatePrices();
+
+  app.get("/api/system/audit-logs", (req, res) => {
+    res.json({ logs });
+  });
 
   app.get("/api/account/balances", async (req, res) => {
       console.log("Fetching balances... started");
