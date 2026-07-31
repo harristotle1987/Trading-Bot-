@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { db } from '../../lib/firebase-admin';
+import { db } from '../../lib/firebase-admin.js';
 
 export default async function handler(req: Request, res: Response) {
     try {
