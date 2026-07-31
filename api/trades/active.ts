@@ -7,10 +7,16 @@ let firebaseInitialized = false;
 if (!getApps().length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         let serviceAccount;
+        const envVal = process.env.FIREBASE_SERVICE_ACCOUNT;
         try {
-            serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+            serviceAccount = JSON.parse(envVal);
         } catch (err) {
-            console.warn("FIREBASE_SERVICE_ACCOUNT is not valid JSON. Ignoring.");
+            try {
+                const decoded = Buffer.from(envVal, 'base64').toString('utf-8');
+                serviceAccount = JSON.parse(decoded);
+            } catch (err2) {
+                console.warn("FIREBASE_SERVICE_ACCOUNT is neither valid JSON nor valid Base64 JSON. Ignoring.");
+            }
         }
         if (serviceAccount) {
             try {
