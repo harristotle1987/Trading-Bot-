@@ -3,7 +3,11 @@ import { getFirestore } from 'firebase-admin/firestore';
 
 if (!getApps().length) {
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        let serviceAccountStr = process.env.FIREBASE_SERVICE_ACCOUNT;
+        if (!serviceAccountStr.trim().startsWith('{')) {
+            serviceAccountStr = Buffer.from(serviceAccountStr, 'base64').toString('utf8');
+        }
+        const serviceAccount = JSON.parse(serviceAccountStr);
         initializeApp({
             credential: cert(serviceAccount),
         });
@@ -13,5 +17,4 @@ if (!getApps().length) {
         });
     }
 }
-
 export const db = getFirestore();

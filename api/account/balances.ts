@@ -1,20 +1,5 @@
 import { Request, Response } from 'express';
-import { getApps, initializeApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-
-if (!getApps().length) {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        initializeApp({
-            credential: cert(serviceAccount),
-        });
-    } else {
-        initializeApp({
-            credential: applicationDefault(),
-        });
-    }
-}
-const db = getFirestore();
+import { db } from '../../lib/firebase-admin';
 
 export default async function handler(req: Request, res: Response) {
   try {
