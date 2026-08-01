@@ -2,19 +2,6 @@ import { getApps, initializeApp, cert, applicationDefault } from 'firebase-admin
 import { getFirestore } from 'firebase-admin/firestore';
 
 /**
- * Sanitizes unescaped control characters (ASCII 0-31) inside JSON string literals
- * that cause "Bad control character in string literal in JSON" crashes.
- */
-function sanitizeJsonString(raw: string): string {
-  return raw.replace(/[\u0000-\u001F]+/g, (match) => {
-    if (match === "\n") return "\\n";
-    if (match === "\r") return "\\r";
-    if (match === "\t") return "\\t";
-    return "";
-  });
-}
-
-/**
  * Lazy singleton getter preventing top-level module evaluation crashes
  */
 export function getFirestoreDb() {
@@ -22,23 +9,27 @@ export function getFirestoreDb() {
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         let credentials;
+        const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+        
         try {
-          // Check if it's base64 encoded first
-          const decoded = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, "base64").toString("utf-8");
-          if (decoded.trim().startsWith("{")) {
-            credentials = JSON.parse(decoded);
+          if (rawKey.startsWith("{")) {
+            try {
+              credentials = JSON.parse(rawKey);
+            } catch (parseError) {
+              // Attempt to fix unescaped newlines in the private key which happens when pasting into Vercel
+              const fixedKey = rawKey.replace(/(-----BEGIN PRIVATE KEY-----\s*[\s\S]+?\s*-----END PRIVATE KEY-----)/, (match) => {
+                return match.replace(/\n/g, '\\n').replace(/\r/g, '');
+              });
+              credentials = JSON.parse(fixedKey);
+            }
           } else {
-            throw new Error("Not base64");
+            // Try base64
+            const decoded = Buffer.from(rawKey, "base64").toString("utf-8");
+            credentials = JSON.parse(decoded);
           }
-        } catch (e) {
-          // Fallback to raw string
-          const sanitized = sanitizeJsonString(process.env.FIREBASE_SERVICE_ACCOUNT);
-          try {
-            credentials = JSON.parse(sanitized);
-          } catch (parseError: any) {
-            console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT. Make sure you pasted the exact JSON file contents without adding extra characters or quotes. First few chars:", process.env.FIREBASE_SERVICE_ACCOUNT.substring(0, 10));
-            throw parseError;
-          }
+        } catch (error) {
+          console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT. Make sure it is valid JSON or Base64. First few chars:", rawKey.substring(0, 15));
+          throw error;
         }
         
         initializeApp({
