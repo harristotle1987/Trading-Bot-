@@ -6,10 +6,15 @@ import { getFirestore } from 'firebase-admin/firestore';
  */
 export function getFirestoreDb() {
   if (getApps().length === 0) {
-    initializeApp({
-      credential: applicationDefault(),
-    });
-    console.log("[Firebase Admin] Successfully initialized with application default credentials.");
+    try {
+      initializeApp({
+        credential: applicationDefault(),
+      });
+      console.log("[Firebase Admin] Successfully initialized with application default credentials.");
+    } catch (error) {
+      console.error("[Firebase Admin] Failed to initialize:", error);
+      throw error;
+    }
   }
   return getFirestore();
 }
