@@ -9,26 +9,44 @@ export function getFirestoreDb() {
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         let credentials;
-        const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+        let rawKey = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
+
+        if (rawKey.startsWith("'") && rawKey.endsWith("'")) {
+           rawKey = rawKey.slice(1, -1).trim();
+        }
+        if (rawKey.startsWith('"') && rawKey.endsWith('"')) {
+           try { rawKey = JSON.parse(rawKey); } catch (e) {}
+           rawKey = rawKey.trim();
+        }
         
         try {
           if (rawKey.startsWith("{")) {
             try {
               credentials = JSON.parse(rawKey);
             } catch (parseError) {
-              // Attempt to fix unescaped newlines in the private key which happens when pasting into Vercel
-              const fixedKey = rawKey.replace(/(-----BEGIN PRIVATE KEY-----\s*[\s\S]+?\s*-----END PRIVATE KEY-----)/, (match) => {
-                return match.replace(/\n/g, '\\n').replace(/\r/g, '');
-              });
-              credentials = JSON.parse(fixedKey);
+              // Aggressive fallback: Extract values using regex if JSON parse fails
+              // due to unescaped characters from Vercel's environment variables.
+              const projectIdMatch = rawKey.match(/"project_id"\s*:\s*"([^"]+)"/);
+              const clientEmailMatch = rawKey.match(/"client_email"\s*:\s*"([^"]+)"/);
+              const privateKeyMatch = rawKey.match(/"private_key"\s*:\s*"([\s\S]+?)"/);
+              
+              if (projectIdMatch && clientEmailMatch && privateKeyMatch) {
+                credentials = {
+                  projectId: projectIdMatch[1],
+                  clientEmail: clientEmailMatch[1],
+                  privateKey: privateKeyMatch[1].replace(/\\n/g, '\n').replace(/\r/g, '')
+                };
+              } else {
+                throw parseError; // Rethrow original if regex doesn't find the fields
+              }
             }
           } else {
             // Try base64
             const decoded = Buffer.from(rawKey, "base64").toString("utf-8");
             credentials = JSON.parse(decoded);
           }
-        } catch (error) {
-          console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT. Make sure it is valid JSON or Base64. First few chars:", rawKey.substring(0, 15));
+        } catch (error: any) {
+          console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT. Make sure it is valid JSON or Base64.");
           throw error;
         }
         
