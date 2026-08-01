@@ -21,8 +21,26 @@ export function getFirestoreDb() {
   if (getApps().length === 0) {
     try {
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const sanitized = sanitizeJsonString(process.env.FIREBASE_SERVICE_ACCOUNT);
-        const credentials = JSON.parse(sanitized);
+        let credentials;
+        try {
+          // Check if it's base64 encoded first
+          const decoded = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT, "base64").toString("utf-8");
+          if (decoded.trim().startsWith("{")) {
+            credentials = JSON.parse(decoded);
+          } else {
+            throw new Error("Not base64");
+          }
+        } catch (e) {
+          // Fallback to raw string
+          const sanitized = sanitizeJsonString(process.env.FIREBASE_SERVICE_ACCOUNT);
+          try {
+            credentials = JSON.parse(sanitized);
+          } catch (parseError: any) {
+            console.error("[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT. Make sure you pasted the exact JSON file contents without adding extra characters or quotes. First few chars:", process.env.FIREBASE_SERVICE_ACCOUNT.substring(0, 10));
+            throw parseError;
+          }
+        }
+        
         initializeApp({
           credential: cert(credentials),
         });
