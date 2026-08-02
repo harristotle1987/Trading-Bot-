@@ -1013,12 +1013,18 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         }
         demoBalance -= capital;
         if (db) setDoc(doc(db, "system", "balances"), { demoBalance }, { merge: true }).catch(console.error);
+    } else if (account_mode === "LIVE") {
+        if (liveBalance < capital) {
+            return res.status(400).json({ error: "Insufficient live balance" });
+        }
+        liveBalance -= capital;
+        if (db) setDoc(doc(db, "system", "balances"), { liveBalance }, { merge: true }).catch(console.error);
     } else {
-        return res.status(400).json({ error: "Live mode not supported for this endpoint yet" });
+        return res.status(400).json({ error: "Invalid account mode" });
     }
     
     const position = {
-        id: "demo_pos_" + nextPosId++,
+        id: (account_mode === "LIVE" ? "live_pos_" : "demo_pos_") + nextPosId++,
         account_mode,
         broker: "BUNKER",
         symbol,
