@@ -351,7 +351,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
         if (timeframe === "1year") intervalParams = "M";
         
 const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category === 'forex';
-        const categoryParam = isForex ? 'linear' : 'spot';
+        const category = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category || "crypto";
+        const categoryParam = category;
         
         const cacheKey = `market_data_${selectedSymbol}_${intervalParams}`;
         const cached = sessionStorage.getItem(cacheKey);
@@ -370,7 +371,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
             }
         }
 
-        const bybitRes = await fetch(`/api/bybit/v5/market/kline?category=${categoryParam}&symbol=${selectedSymbol}&interval=${intervalParams}&limit=500`);
+        const bybitRes = await fetch(`/api/market/kline?category=${categoryParam}&symbol=${selectedSymbol}&interval=${intervalParams}&limit=500`);
         if (!bybitRes.ok) throw new Error(`HTTP ${bybitRes.status}`);
         const bybitData = await bybitRes.json();
         if (bybitData.retCode === 0 && bybitData.result?.list) {
@@ -402,7 +403,8 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
     const connectWebSocket = () => {
       const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category === 'forex';
       
-      if (!isForex && timeframe === "1s") {
+      const category = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category || "crypto";
+      if (category === "crypto" && timeframe === "1s") {
           // Use Binance WebSocket for 1s data
           const wsUrl = `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@kline_1s`;
           ws = new WebSocket(wsUrl);
@@ -427,7 +429,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
                   }
               }
           };
-      } else if (isForex) {
+      } else if (category === "forex" || category === "stocks") {
           // Bybit doesn't support forex, so we poll our own server for updates
           let currentPrice = 1.0;
           let lastCandleTime = Math.floor(Date.now() / 1000);
@@ -487,74 +489,54 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
           ws = { close: () => clearInterval(updateInterval) } as any;
           
       } else {
-          // Connect directly to Bybit WebSocket
-          const wsUrl = "wss://stream.bybit.com/v5/public/linear";
-          ws = new WebSocket(wsUrl);
-          
-          ws.onopen = () => {
-            let wsInterval = timeframe;
-            if (timeframe === "1m") wsInterval = "1";
-            if (timeframe === "5m") wsInterval = "5";
-            if (timeframe === "15m") wsInterval = "15";
-            if (timeframe === "1h") wsInterval = "60";
-            if (timeframe === "4h") wsInterval = "240";
-            if (timeframe === "6h") wsInterval = "360";
-            if (timeframe === "12h") wsInterval = "720";
-            if (timeframe === "1d") wsInterval = "D";
-            if (timeframe === "1year") wsInterval = "M";
+          // Connect directly to Binance WebSocket
+let wsInterval = timeframe;
+          if (timeframe === "1m") wsInterval = "1m";
+          else if (timeframe === "5m") wsInterval = "5m";
+          else if (timeframe === "15m") wsInterval = "15m";
+          else if (timeframe === "1h") wsInterval = "1h";
+          else if (timeframe === "4h") wsInterval = "4h";
+          else if (timeframe === "6h") wsInterval = "6h";
+          else if (timeframe === "12h") wsInterval = "12h";
+          else if (timeframe === "1d") wsInterval = "1d";
+          else wsInterval = "1m";
 
-            ws.send(JSON.stringify({
-              op: "subscribe",
-              args: [`kline.${wsInterval}.${selectedSymbol}`]
-            }));
-          };
+          const wsUrl = `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@kline_${wsInterval}`;
+          ws = new WebSocket(wsUrl);
           
           ws.onmessage = (event) => {
             try {
               const msg = JSON.parse(event.data);
-              let wsInterval = timeframe;
-              if (timeframe === "1m") wsInterval = "1";
-              if (timeframe === "5m") wsInterval = "5";
-              if (timeframe === "15m") wsInterval = "15";
-              if (timeframe === "1h") wsInterval = "60";
-              if (timeframe === "4h") wsInterval = "240";
-              if (timeframe === "6h") wsInterval = "360";
-              if (timeframe === "12h") wsInterval = "720";
-              if (timeframe === "1d") wsInterval = "D";
-              if (timeframe === "1year") wsInterval = "M";
-
-              if (isMounted && msg.topic === `kline.${wsInterval}.${selectedSymbol}` && msg.data) {
-                for (const item of msg.data) {
-                  candlestickSeriesInstance.update({
-                    time: Math.floor(item.start / 1000) as any,
-                    open: parseFloat(item.open),
-                    high: parseFloat(item.high),
-                    low: parseFloat(item.low),
-                    close: parseFloat(item.close),
-                  });
-                }
+              if (!msg.k) return;
+              const kline = msg.k;
+              
+              if (isMounted) {
+                candlestickSeriesInstance.update({
+                  time: Math.floor(kline.t / 1000) as any,
+                  open: parseFloat(kline.o),
+                  high: parseFloat(kline.h),
+                  low: parseFloat(kline.l),
+                  close: parseFloat(kline.c)
+                });
               }
             } catch (err: any) {
-              if (err && err.message && err.message.includes("Cannot update oldest data")) {
-                  // Ignore lightweight-charts error for older data
-              } else {
-                  console.error("Bybit WS message error", err);
-              }
+                if (err && err.message && err.message.includes("Cannot update oldest data")) {
+                    // Ignore lightweight-charts error for older data
+                } else {
+                    console.error("Binance WS message error", err);
+                }
             }
           };
       }
+      return () => {
+          if (ws) ws.close();
+      };
     };
-    
     connectWebSocket();
 
     return () => {
       isMounted = false;
-      window.removeEventListener("resize", handleResize);
       if (ws) ws.close();
-      try { chart.remove(); } catch (e) {}
-      chartRef.current = null;
-      seriesRef.current = null;
-      markersPluginRef.current = null;
     };
   }, [selectedSymbol, timeframe]);
 

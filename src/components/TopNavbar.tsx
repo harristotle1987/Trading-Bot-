@@ -12,10 +12,10 @@ export default function TopNavbar() {
   const [needsAuth, setNeedsAuth] = useState(false);
   const [balances, setBalances] = useState<{
     demo: WalletMetrics;
-    bybit_live: WalletMetrics;
+    live: WalletMetrics;
   }>({
     demo: { total_equity: 10000.0, available_balance: 10000.0, currency: "USDT", status: "ONLINE" },
-    bybit_live: { total_equity: 0.0, available_balance: 0.0, currency: "USDT", status: "OFFLINE" },
+    live: { total_equity: 0.0, available_balance: 0.0, currency: "USDT", status: "OFFLINE" },
   });
 
   const checkAuthStatus = async () => {
@@ -123,18 +123,18 @@ export default function TopNavbar() {
         >
           <span
             className={`w-2 h-2 rounded-full ${
-              balances.bybit_live.status === "ONLINE" ? "bg-[#FFD600] animate-ping" : "bg-gray-600"
+              balances.live.status === "ONLINE" ? "bg-[#FFD600] animate-ping" : "bg-gray-600"
             }`}
           ></span>
           <div>
             <span className="text-[10px] uppercase text-[#838C9C] block leading-tight flex items-center gap-1">
               BYBIT LIVE
               <span className="text-[9px] text-[#FFD600]">
-                ({balances.bybit_live.status})
+                ({balances.live.status})
               </span>
             </span>
             <span className="font-bold text-[#FFD600]">
-              ${balances.bybit_live.total_equity.toLocaleString()} {balances.bybit_live.currency}
+              ${balances.live.total_equity.toLocaleString()} {balances.live.currency}
             </span>
           </div>
         </div>

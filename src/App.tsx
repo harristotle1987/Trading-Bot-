@@ -56,7 +56,15 @@ export const TRADABLE_PAIRS = [
     { symbol: "EURAUD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "GBPCAD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "CADJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "CHFJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] }
+    { symbol: "CHFJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    // Stocks
+    { symbol: "AAPL", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "MSFT", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "TSLA", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "AMZN", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "GOOGL", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "NVDA", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "META", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] }
 ];
 
 const NAV_ITEMS = [

@@ -45,11 +45,6 @@ async function startServer() {
   }
 
 
-  // Bybit V5 Live Wallet Balance Service
-  const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "";
-  const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET || "";
-  const BYBIT_BASE_URL = "https://api.bybit.com"; // Use "https://api-testnet.bybit.com" for Testnet
-
   // Global Price Cache
   const GLOBAL_PRICES: Record<string, number> = {};
   
@@ -131,6 +126,7 @@ async function startServer() {
                       });
                       
                       const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
+      const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META"];
                       
                       const symbolIdsToSubscribe = forexSymbols
                           .map(s => cTraderNameMap[s])
@@ -164,30 +160,72 @@ async function startServer() {
   
   setupCTrader();
 
-  const updatePrices = async () => {
+const updatePrices = async () => {
       const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT"];
       const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
+      const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META"];
       
       try {
-          // Crypto from Bybit
-          const bybitRes = await fetch("https://api.bybit.com/v5/market/tickers?category=linear");
-          if (!bybitRes.ok) {
-              console.error("Bybit fetch failed:", bybitRes.statusText);
-          } else {
-              const bybitData = await bybitRes.json();
-              const tickers = bybitData.result?.list || [];
-              
+// Crypto & Forex from Finnhub if available
+          if (process.env.FINNHUB_API_KEY) {
+              // Finnhub Crypto
               for (const s of cryptoSymbols) {
-                  const ticker = tickers.find((t: any) => t.symbol === s);
-                  if (ticker) {
-                      GLOBAL_PRICES[s] = parseFloat(ticker.lastPrice);
-                  } else {
-                      console.warn(`Bybit ticker not found for ${s}`);
+                  try {
+                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:${s}&token=${process.env.FINNHUB_API_KEY}`);
+                      if (finnhubRes.ok) {
+                          const data = await finnhubRes.json();
+                          if (data && data.c) GLOBAL_PRICES[s] = data.c;
+                      }
+                      await new Promise(r => setTimeout(r, 35)); // avoid rate limit (30 API calls/sec for free tier)
+                  } catch (e) {
+                      console.warn(`Finnhub fetch failed for ${s}`);
                   }
               }
+              // Finnhub Forex
+              for (const s of forexSymbols) {
+                  try {
+                      const finnhubSymbol = `OANDA:${s.substring(0,3)}_${s.substring(3)}`;
+                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${process.env.FINNHUB_API_KEY}`);
+                      if (finnhubRes.ok) {
+                          const data = await finnhubRes.json();
+                          if (data && data.c && data.c !== 0) GLOBAL_PRICES[s] = data.c;
+                      }
+                      await new Promise(r => setTimeout(r, 35));
+                  } catch (e) {
+                      console.warn(`Finnhub fetch failed for ${s}`);
+                  }
+              }
+              // Finnhub Stocks
+              for (const s of stockSymbols) {
+                  try {
+                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${process.env.FINNHUB_API_KEY}`);
+                      if (finnhubRes.ok) {
+                          const data = await finnhubRes.json();
+                          if (data && data.c && data.c !== 0) GLOBAL_PRICES[s] = data.c;
+                      }
+                      await new Promise(r => setTimeout(r, 35));
+                  } catch (e) {
+                      console.warn(`Finnhub fetch failed for ${s}`);
+                  }
+              }
+
+          } else {
+              // Fallback to Binance for Crypto
+              try {
+                  const binanceRes = await fetch("https://api.binance.com/api/v3/ticker/price");
+                  if (binanceRes.ok) {
+                      const binanceData = await binanceRes.json();
+                      for (const s of cryptoSymbols) {
+                          const ticker = binanceData.find((t: any) => t.symbol === s);
+                          if (ticker) GLOBAL_PRICES[s] = parseFloat(ticker.price);
+                      }
+                  }
+              } catch (e) {
+                  console.warn("Binance fallback failed", e);
+              }
           }
-          
-          // Forex from Polygon
+
+          // Forex from Polygon as secondary fallback
           const forexFallbacks: Record<string, number> = {
             "EURUSD": 1.0850, "GBPUSD": 1.2850, "USDJPY": 150.00, "AUDUSD": 0.6700,
             "USDCAD": 1.3600, "USDCHF": 0.9200, "NZDUSD": 0.6100, "EURGBP": 0.8400,
@@ -197,12 +235,9 @@ async function startServer() {
           
           if (process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET) {
               for (const s of forexSymbols) {
-                  // We only fallback if GLOBAL_PRICES hasn't been set by WebSocket
-                  if (!GLOBAL_PRICES[s]) {
-                      GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
-                  }
+                  if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
               }
-          } else if (process.env.POLYGON_API_KEY) {
+          } else if (!process.env.FINNHUB_API_KEY && process.env.POLYGON_API_KEY) { } else if (process.env.POLYGON_API_KEY) {
               let keyForbidden = false;
               for (const s of forexSymbols) {
                   if (keyForbidden) {
@@ -272,70 +307,14 @@ async function startServer() {
       };
       console.log("Demo balance fetched:", demoBalance);
 
-      // Live Bybit Capital Engine
+      // Live Capital Engine
       
       let live_data = { total_equity: liveBalance, available_balance: liveBalance, currency: "USDT", status: "SIMULATED" };
       
-      if (BYBIT_API_KEY && BYBIT_API_SECRET) {
-
-          try {
-              console.log("Fetching Bybit balances...");
-              // ... (rest of the code)
-              const endpoint = "/v5/account/wallet-balance";
-              const recvWindow = "5000";
-              const timestamp = Date.now().toString();
-              const paramsStr = "accountType=UNIFIED";
-              
-              const rawPayload = timestamp + BYBIT_API_KEY + recvWindow + paramsStr;
-              const signature = crypto.createHmac("sha256", BYBIT_API_SECRET).update(rawPayload).digest("hex");
-              
-              const url = `${BYBIT_BASE_URL}${endpoint}?${paramsStr}`;
-              const response = await fetch(url, {
-                  headers: {
-                      "X-BAPI-API-KEY": BYBIT_API_KEY,
-                      "X-BAPI-SIGN": signature,
-                      "X-BAPI-TIMESTAMP": timestamp,
-                      "X-BAPI-RECV-WINDOW": recvWindow
-                  }
-              });
-              
-              if (response.ok) {
-                  const data = await response.json();
-                  if (data.retCode === 0 && data.result.list.length > 0) {
-                      const accountInfo = data.result.list[0];
-                      const total_equity = parseFloat(accountInfo.totalEquity || "0");
-                      const wallet_balance = parseFloat(accountInfo.totalWalletBalance || "0");
-                      const available_balance = parseFloat(accountInfo.totalAvailableBalance || wallet_balance.toString());
-                      
-                      live_data = {
-                          total_equity: parseFloat(total_equity.toFixed(2)),
-                          available_balance: parseFloat(available_balance.toFixed(2)),
-                          currency: "USDT",
-                          status: "ONLINE"
-                      };
-                  } else {
-                      console.log("Bybit response error:", data);
-                      live_data.status = "ERROR";
-                  }
-              } else {
-                  const errText = await response.text();
-                  if (response.status === 403 && errText.includes("CloudFront")) {
-                      console.log("Bybit API access blocked by CloudFront (Expected on this platform IPs). Live wallet will remain offline.");
-                  } else {
-                      console.log("Bybit fetch failed, status:", response.status, "url:", url);
-                  }
-                  live_data.status = "OFFLINE";
-              }
-          } catch (e: any) {
-              console.log("Bybit Wallet Error:", e.message || e);
-              live_data.status = "OFFLINE";
-          }
-      }
-
       console.log("Sending balances response...");
       res.json({
           demo: demo_data,
-          bybit_live: live_data
+          live: live_data
       });
   });
 
@@ -653,7 +632,7 @@ async function startServer() {
   app.get("/api/config/keys", (req, res) => {
       res.json({
           nvidia: !!process.env.NVIDIA_API_KEY,
-          bybit: !!(process.env.BYBIT_API_KEY && process.env.BYBIT_API_SECRET),
+          bybit: false,
           polygon: !!process.env.POLYGON_API_KEY,
           finnhub: !!process.env.FINNHUB_API_KEY,
           ctrader: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET),
@@ -662,10 +641,10 @@ async function startServer() {
   });
 
   app.post("/api/config/keys", express.json(), (req, res) => {
-      const { nvidia, bybit_key, bybit_secret, polygon, finnhub, ctrader_client_id, ctrader_client_secret, ctrader_access_token } = req.body;
+      const { nvidia, polygon, finnhub, ctrader_client_id, ctrader_client_secret, ctrader_access_token } = req.body;
       if (nvidia) process.env.NVIDIA_API_KEY = nvidia;
-      if (bybit_key) process.env.BYBIT_API_KEY = bybit_key;
-      if (bybit_secret) process.env.BYBIT_API_SECRET = bybit_secret;
+      
+      
       if (polygon) process.env.POLYGON_API_KEY = polygon;
       if (finnhub) process.env.FINNHUB_API_KEY = finnhub;
       if (ctrader_client_id) process.env.CTRADER_CLIENT_ID = ctrader_client_id;
@@ -846,13 +825,14 @@ async function startServer() {
             const data = await binanceRes.json();
             return parseFloat(data.price);
         }
-        // Fallback to Bybit
-        const bybitRes = await fetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`);
-        if (bybitRes.ok) {
-            const bybitData = await bybitRes.json();
-            const list = bybitData.result?.list;
-            if (list && list.length > 0) {
-                return parseFloat(list[0].lastPrice);
+// Fallback to Finnhub
+        if (process.env.FINNHUB_API_KEY) {
+            const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:${symbol}&token=${process.env.FINNHUB_API_KEY}`);
+            if (finnhubRes.ok) {
+                const data = await finnhubRes.json();
+                if (data && data.c) {
+                    return parseFloat(data.c);
+                }
             }
         }
     } catch (e) {
@@ -955,7 +935,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     const position = {
         id: `live_pos_${nextPosId++}`,
         account_mode: "LIVE",
-        broker: "BYBIT",
+        broker: "BINANCE",
         symbol: order.symbol,
         side: order.side,
         quantity: order.qty,
@@ -1126,7 +1106,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       try {
           const results = await Promise.all([
               checkService("Neon PostgreSQL", false, 45 + Math.random() * 50),
-              checkService("Exchange API (Bybit)", false, 120 + Math.random() * 100),
+              checkService("Exchange API (Binance)", false, 120 + Math.random() * 100),
               checkService("Price Feed (Finnhub)", false, 80 + Math.random() * 60),
           ]);
           res.json({ status: "SUCCESS", diagnostics: results });
@@ -1337,15 +1317,22 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       res.json({ status: "success", snapshots: chartSnapshots });
   });
 
-  app.get("/api/bybit/v5/market/kline", async (req, res) => {
+    app.get("/api/market/kline", async (req, res) => {
     try {
       const { category, symbol, interval, limit } = req.query;
       
       const isForex = typeof symbol === 'string' && ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP'].includes(symbol);
       
+      let parsedLimit = parseInt(limit as string) || 500;
+      if (parsedLimit > 1000) parsedLimit = 1000;
 
-      if (isForex) {
+if (isForex || category === 'stocks') {
+          let finnhubSymbol = symbol;
+          if (isForex) {
+              finnhubSymbol = `OANDA:${symbol.substring(0,3)}_${symbol.substring(3)}`;
+          }
           const polygonKey = process.env.POLYGON_API_KEY;
+          const finnhubKey = process.env.FINNHUB_API_KEY;
           let multiplier = 1;
           let timespan = 'minute';
           let intervalMs = 60000;
@@ -1365,9 +1352,48 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
           else if (interval === "W") { multiplier = 1; timespan = 'week'; intervalMs = 604800000; }
           else { multiplier = 1; timespan = 'minute'; intervalMs = 60000; }
           
-          const parsedLimit = parseInt(limit as string) || 500;
+// Try Finnhub for Stocks & Forex Klines
+          if (finnhubKey) {
+              let finnhubReso = '1';
+              if (interval === "1") finnhubReso = '1';
+              else if (interval === "5") finnhubReso = '5';
+              else if (interval === "15") finnhubReso = '15';
+              else if (interval === "30") finnhubReso = '30';
+              else if (interval === "60") finnhubReso = '60';
+              else if (interval === "D") finnhubReso = 'D';
+              else if (interval === "W") finnhubReso = 'W';
+              else if (interval === "M") finnhubReso = 'M';
+              
+              const to = Math.floor(Date.now() / 1000);
+              const from = to - (intervalMs / 1000 * parsedLimit);
+              
+              const finnhubUrl = `https://finnhub.io/api/v1/stock/candle?symbol=${finnhubSymbol}&resolution=${finnhubReso}&from=${from}&to=${to}&token=${finnhubKey}`;
+              const finnRes = await fetch(finnhubUrl);
+              if (finnRes.ok) {
+                  const data = await finnRes.json();
+                  if (data.s === 'ok' && data.t && data.t.length > 0) {
+                      const list = data.t.map((t: number, i: number) => [
+                          (t * 1000).toString(),
+                          data.o[i].toString(),
+                          data.h[i].toString(),
+                          data.l[i].toString(),
+                          data.c[i].toString(),
+                          data.v[i].toString(),
+                          "1"
+                      ]).reverse();
+                      GLOBAL_PRICES[symbol as string] = data.c[data.c.length - 1];
+                      return res.json({
+                          retCode: 0,
+                          retMsg: "OK",
+                          result: { category: "linear", symbol, list },
+                          retExtInfo: {},
+                          time: Date.now()
+                      });
+                  }
+              }
+          }
           
-          if (polygonKey) {
+          if (polygonKey && isForex) {
               const to = Date.now();
               const from = to - (intervalMs * parsedLimit * 2);
               const polygonUrl = `https://api.polygon.io/v2/aggs/ticker/C:${symbol}/range/${multiplier}/${timespan}/${from}/${to}?adjusted=true&sort=desc&limit=${parsedLimit}&apiKey=${polygonKey}`;
@@ -1399,11 +1425,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
           // Generate mock forex data
           if (interval === "1s") intervalMs = 1000;
-
-          
           let currentPrice = GLOBAL_PRICES[symbol as string] || 1.1370; // Use cache or fallback
           
-                    const list = [];
+          const list = [];
           const now = Math.floor(Date.now() / intervalMs) * intervalMs;
           for (let i = 0; i < parsedLimit; i++) {
               const time = now - (i * intervalMs);
@@ -1424,85 +1448,54 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
           });
       }
 
-      if (!isForex && interval === "1s") {
-          // Use Binance for 1s data (Bybit doesn't support 1s directly for kline API)
-          const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=1s&limit=${limit || 500}`;
-          const binanceRes = await fetch(binanceUrl);
-          if (binanceRes.ok) {
-              const binanceData = await binanceRes.json();
-              // Binance returns oldest to newest. Bybit returns newest to oldest.
-              const list = binanceData.map((k: any) => [
-                  k[0].toString(), // open time
-                  k[1], // open
-                  k[2], // high
-                  k[3], // low
-                  k[4], // close
-                  k[5], // volume
-                  k[7]  // quote asset volume / turnover
-              ]).reverse();
-              
-              return res.json({
-                  retCode: 0,
-                  retMsg: "OK",
-                  result: { category: category || 'spot', symbol, list },
-                  retExtInfo: {},
-                  time: Date.now()
-              });
-          }
-      }
-
-      const BYBIT_API_KEY = process.env.BYBIT_API_KEY;
-      const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET;
-      const BYBIT_BASE_URL = "https://api.bybit.com"; // Use "https://api-testnet.bybit.com" for Testnet
-      
-      const endpoint = "/v5/market/kline";
-      const paramsObj = {
-          category: String(category || 'spot'),
-          interval: String(interval || 1),
-          limit: String(limit || 500),
-          symbol: String(symbol)
+      // Non-Forex (Crypto) -> Map Bybit intervals to Binance intervals
+      const intervalMap: Record<string, string> = {
+          "1s": "1s",
+          "1": "1m",
+          "3": "3m",
+          "5": "5m",
+          "15": "15m",
+          "30": "30m",
+          "60": "1h",
+          "120": "2h",
+          "240": "4h",
+          "360": "6h",
+          "720": "12h",
+          "D": "1d",
+          "W": "1w",
+          "M": "1M"
       };
-      const paramsStr = Object.keys(paramsObj)
-          .sort()
-          // @ts-ignore
-          .map(key => `${key}=${paramsObj[key]}`)
-          .join('&');
       
-      const url = `${BYBIT_BASE_URL}${endpoint}?${paramsStr}`;
+      const binanceInterval = intervalMap[interval as string] || "1m";
+      const binanceUrl = `https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${binanceInterval}&limit=${parsedLimit}`;
+      const binanceRes = await fetch(binanceUrl);
       
-      let headers: any = {};
-      if (BYBIT_API_KEY && BYBIT_API_SECRET) {
-          const recvWindow = "5000";
-          const timestamp = Date.now().toString();
-          const rawPayload = timestamp + BYBIT_API_KEY + recvWindow + paramsStr;
-          const signature = crypto.createHmac("sha256", BYBIT_API_SECRET).update(rawPayload).digest("hex");
-          headers = {
-              "X-BAPI-API-KEY": BYBIT_API_KEY,
-              "X-BAPI-SIGN": signature,
-              "X-BAPI-TIMESTAMP": timestamp,
-              "X-BAPI-RECV-WINDOW": recvWindow
-          };
-      }
-      
-      const bybitRes = await fetch(url, { headers });
-      if (!bybitRes.ok) {
-          const errText = await bybitRes.text();
-          if (bybitRes.status === 403 && errText.includes("CloudFront")) {
-              throw new Error("CloudFront Blocked");
-          }
-          throw new Error(`Bybit HTTP error ${bybitRes.status}`);
-      }
-      const text = await bybitRes.text();
-      try {
-          const bybitData = JSON.parse(text);
-          return res.json(bybitData);
-      } catch (e) {
-          throw new Error("Invalid JSON from Bybit");
+      if (binanceRes.ok) {
+          const binanceData = await binanceRes.json();
+          // Binance returns oldest to newest. Bybit returns newest to oldest.
+          const list = binanceData.map((k: any) => [
+              k[0].toString(), // open time
+              k[1], // open
+              k[2], // high
+              k[3], // low
+              k[4], // close
+              k[5], // volume
+              k[7]  // quote asset volume / turnover
+          ]).reverse();
+          
+          return res.json({
+              retCode: 0,
+              retMsg: "OK",
+              result: { category: category || 'spot', symbol, list },
+              retExtInfo: {},
+              time: Date.now()
+          });
+      } else {
+          throw new Error("Binance API fetch failed: " + binanceRes.status);
       }
     } catch (error: any) {
-      if (error.message !== "CloudFront Blocked") {
-          console.log("Bybit KLine proxy error, falling back to mock data:", error.message || error);
-      }
+      console.log("KLine fetch error, falling back to mock data:", error.message || error);
+      
       // Fallback to mock data for crypto too
       const { symbol, interval, limit } = req.query;
       const parsedLimit = parseInt(limit as string) || 500;
@@ -1512,30 +1505,25 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       if (interval === "60") intervalMs = 3600000;
       if (interval === "D") intervalMs = 86400000;
       
-      let currentPrice = GLOBAL_PRICES[symbol as string] || 65000.00;
-      if (typeof symbol === 'string' && !GLOBAL_PRICES[symbol as string]) {
-          if (symbol.includes("ETH")) currentPrice = 3500.00;
-          if (symbol.includes("SOL")) currentPrice = 140.00;
-      }
-      
+      let currentPrice = GLOBAL_PRICES[symbol as string] || 50000;
       const list = [];
       const now = Math.floor(Date.now() / intervalMs) * intervalMs;
       for (let i = 0; i < parsedLimit; i++) {
           const time = now - (i * intervalMs);
           const close = currentPrice;
-          const high = close + (Math.random() * close * 0.001);
-          const low = close - (Math.random() * close * 0.001);
+          const high = close + (Math.random() * 50);
+          const low = close - (Math.random() * 50);
           const open = low + (Math.random() * (high - low));
           currentPrice = open;
-          list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "100", "1000000"]);
+          list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "1", "50000"]);
       }
       
-      res.json({
+      return res.json({
           retCode: 0,
-          retMsg: "OK (MOCK FALLBACK)",
-          result: { category: req.query.category || "linear", symbol, list },
+          retMsg: "OK",
+          result: { category: "spot", symbol, list },
           retExtInfo: {},
-          time: now
+          time: Date.now()
       });
     }
   });
@@ -1713,7 +1701,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                       const position = {
                           id: `live_pos_${nextPosId++}`,
                           account_mode: "LIVE",
-                          broker: "BYBIT",
+                          broker: "BINANCE",
                           symbol: symbol,
                           side: decision.action,
                           quantity: tradeAmount / entryPrice,
