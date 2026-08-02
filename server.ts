@@ -349,6 +349,21 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Vite middleware
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
   // Risk API Mocks for UI Development
   let riskSettings = {
     max_concurrent_trades: 3,
