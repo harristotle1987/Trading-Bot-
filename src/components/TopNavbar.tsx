@@ -123,14 +123,14 @@ export default function TopNavbar() {
         >
           <span
             className={`w-2 h-2 rounded-full ${
-              balances.live.status === "ONLINE" ? "bg-[#FFD600] animate-ping" : "bg-gray-600"
+              balances.live?.status === "ONLINE" ? "bg-[#FFD600] animate-ping" : "bg-gray-600"
             }`}
           ></span>
           <div>
             <span className="text-[10px] uppercase text-[#838C9C] block leading-tight flex items-center gap-1">
-              BYBIT LIVE
+              BITGET LIVE
               <span className="text-[9px] text-[#FFD600]">
-                ({balances.live.status})
+                ({balances.live?.status})
               </span>
             </span>
             <span className="font-bold text-[#FFD600]">
