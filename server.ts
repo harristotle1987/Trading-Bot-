@@ -64,12 +64,12 @@ async function startServer() {
       if (!process.env.CTRADER_CLIENT_ID || !process.env.CTRADER_CLIENT_SECRET) return;
       if (cTraderConn) return;
 
-      cTraderConn = new CTraderConnection({
-          host: "live.ctraderapi.com",
-          port: 5035,
-      });
-
       try {
+          cTraderConn = new CTraderConnection({
+              host: "live.ctraderapi.com",
+              port: 5035,
+          });
+
           await cTraderConn.open();
           console.log("cTrader Connected");
 
