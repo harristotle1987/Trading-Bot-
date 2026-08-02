@@ -12,13 +12,17 @@ export default function SystemHealthDashboard() {
     const fetchSystemData = async () => {
       try {
         const healthRes = await fetch('/api/system/health');
-        const healthData = await healthRes.json();
-        setHealth(healthData);
-        setMaintenanceMode(healthData.status === "MAINTENANCE");
+        if (healthRes.ok) {
+          const healthData = await healthRes.json();
+          setHealth(healthData);
+          setMaintenanceMode(healthData.status === "MAINTENANCE");
+        }
 
         const logsRes = await fetch('/api/system/audit-logs');
-        const logsData = await logsRes.json();
-        setAuditLogs(logsData.logs);
+        if (logsRes.ok) {
+          const logsData = await logsRes.json();
+          setAuditLogs(logsData.logs || []);
+        }
       } catch (err) {
         if (err instanceof TypeError) { console.warn("System Health API offline"); } else { console.error("Failed to fetch system data", err); }
       }
@@ -108,13 +112,13 @@ export default function SystemHealthDashboard() {
         <div className="col-span-1 md:col-span-3 grid grid-cols-2 md:grid-cols-4 gap-4">
           {health && Object.entries(health.services).map(([key, svc]: [string, any]) => (
             <div key={key} className="bg-[#0B0C10] p-4 rounded-lg border-2 border-[#1F2833] shadow-inner flex flex-col justify-between h-32 relative overflow-hidden">
-              <div className={`absolute top-0 left-0 w-full h-1 ${getServiceStatusColor(svc?.status).split(' ')[1]}`} />
+              <div className={`absolute top-0 left-0 w-full h-1 ${getServiceStatusColor(svc.status).split(' ')[1]}`} />
               <p className="text-xs text-[#66FCF1] uppercase font-bold z-10">{key.replace('_', ' ')}</p>
               
               <div className="flex items-center justify-between mt-auto z-10">
-                <span className={`text-sm font-bold uppercase flex items-center gap-2 ${getServiceStatusColor(svc?.status).split(' ')[0]}`}>
-                  <div className={`w-2 h-2 rounded-full ${getServiceStatusColor(svc?.status).split(' ')[1]} ${svc?.status === 'ONLINE' || svc?.status === 'ACTIVE' ? 'animate-pulse' : ''}`} />
-                  {svc?.status}
+                <span className={`text-sm font-bold uppercase flex items-center gap-2 ${getServiceStatusColor(svc.status).split(' ')[0]}`}>
+                  <div className={`w-2 h-2 rounded-full ${getServiceStatusColor(svc.status).split(' ')[1]} ${svc.status === 'ONLINE' || svc.status === 'ACTIVE' ? 'animate-pulse' : ''}`} />
+                  {svc.status}
                 </span>
                 <span className="text-xs text-[#838C9C]">{svc.latency}ms</span>
               </div>

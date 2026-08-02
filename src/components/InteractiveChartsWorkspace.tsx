@@ -537,6 +537,9 @@ let wsInterval = timeframe;
     return () => {
       isMounted = false;
       if (ws) ws.close();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
     };
   }, [selectedSymbol, timeframe]);
 
