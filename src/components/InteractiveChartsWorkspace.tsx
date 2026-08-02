@@ -537,7 +537,13 @@ let wsInterval = timeframe;
     return () => {
       isMounted = false;
       if (ws) ws.close();
-      chart.remove();
+      if (chart) {
+        try {
+            chart.remove();
+        } catch (e) {
+            console.warn("Chart removal error:", e);
+        }
+      }
       chartRef.current = null;
       seriesRef.current = null;
     };
@@ -608,7 +614,7 @@ let wsInterval = timeframe;
           <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
             Active Symbol: 
             <select
-                className="bg-[#12161D] border border-[#1F2833] text-white px-2 py-0.5 rounded font-mono font-bold outline-none"
+                className="bg-[#12161D] border border-[#1F2833] text-white px-3 py-1 rounded font-mono font-bold outline-none cursor-pointer hover:border-[#3DDBD9] transition-all"
                 value={selectedSymbol}
                 onChange={(e) => setSelectedSymbol(e.target.value)}
             >
@@ -668,7 +674,7 @@ let wsInterval = timeframe;
               <span className="font-mono text-lg font-bold text-white">{selectedSymbol}</span>
               <div className="flex bg-[#0B0E13] border border-[#232833] rounded overflow-hidden">
               <select
-                className="bg-[#0B0E13] border border-[#232833] text-[#E6E9EF] px-2 py-1 rounded font-mono font-bold text-xs outline-none"
+                className="bg-[#0B0E13] border border-[#232833] text-[#E6E9EF] px-3 py-1 rounded font-mono font-bold text-xs outline-none cursor-pointer hover:border-[#3DDBD9] transition-all"
                 value={timeframe}
                 onChange={(e) => handleSetTimeframe(e.target.value)}
               >

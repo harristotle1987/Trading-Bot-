@@ -18,6 +18,8 @@ import AnalyticsDashboard from "./components/AnalyticsDashboard";
 import TopNavbar from "./components/TopNavbar";
 import HistoricalTradesModal from "./components/HistoricalTradesModal";
 import MarketTicker from "./components/MarketTicker";
+import QuickOrderPanel from "./components/QuickOrderPanel";
+
 
 export const TRADABLE_PAIRS = [
     // Crypto
@@ -198,6 +200,7 @@ export default function App() {
             </div>
           ))}
       </nav>
+      <QuickOrderPanel activeSymbol={chartFocusSymbol || "BTCUSDT"} accountMode="DEMO" />
     </div>
   );
 }

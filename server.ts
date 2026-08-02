@@ -253,7 +253,9 @@ const updatePrices = async () => {
                       const data = await res.json();
                       if (data.c) {
                           GLOBAL_PRICES[s] = data.c;
+                          console.log(`Updated price for ${s}: ${data.c}`);
                       } else {
+                          console.warn(`No price for ${s} from Finnhub:`, data);
                           throw new Error("No price from Finnhub");
                       }
                   } catch (e) {
@@ -994,7 +996,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
 
   app.post("/api/trades/execute", express.json(), async (req, res) => {
-    const { symbol, side, capital, execution_price, account_mode } = req.body;
+    const { symbol, side, capital, execution_price, account_mode, tp, sl } = req.body;
     if (account_mode === "DEMO") {
         if (demoBalance < capital) {
             return res.status(400).json({ error: "Insufficient balance" });
@@ -1020,6 +1022,8 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         quantity: capital / execution_price,
         entry_price: execution_price,
         current_mark_price: execution_price,
+        take_profit: tp,
+        stop_loss: sl,
         unrealized_pnl: 0,
         realized_pnl: 0,
         status: "OPEN",
