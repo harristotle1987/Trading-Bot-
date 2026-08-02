@@ -246,31 +246,18 @@ const updatePrices = async () => {
                       continue;
                   }
                   
-                  // Polygon expects forex symbols in a specific format (e.g., EUR/USD)
-                  const polygonSymbol = `C:${s.substring(0,3)}${s.substring(3)}`;
+                  // Finnhub or fallbacks
                   try {
-                      const res = await fetch(`https://api.polygon.io/v2/snapshot/locale/global/markets/forex/tickers/${polygonSymbol}?apiKey=${process.env.POLYGON_API_KEY}`);
-                      
-                      if (res.status === 403) {
-                          keyForbidden = true;
-                          throw new Error("Forbidden");
-                      }
-                      if (!res.ok) {
-                          throw new Error(`Polygon fetch failed for ${s}: ${res.statusText}`);
-                      }
-                      
+                      // Finnhub fetch for forex/indices
+                      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=OANDA:${s}&token=${process.env.FINNHUB_API_KEY}`);
                       const data = await res.json();
-                      if (data.results?.ticker?.min?.c) {
-                          GLOBAL_PRICES[s] = data.results.ticker.min.c;
+                      if (data.c) {
+                          GLOBAL_PRICES[s] = data.c;
                       } else {
-                          throw new Error(`Polygon fetch returned no data for ${s}`);
+                          throw new Error("No price from Finnhub");
                       }
                   } catch (e) {
-                      if (e.message === "Forbidden") {
-                          console.warn("Polygon API key is Forbidden. Switching to fallbacks.");
-                      } else {
-                          console.warn(`Falling back to default price for ${s} due to:`, e.message);
-                      }
+                      console.error(`Finnhub fetch failed for ${s}:`, e);
                       if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
                       else GLOBAL_PRICES[s] += GLOBAL_PRICES[s] * (Math.random() * 0.0001 * 2 - 0.0001);
                   }
@@ -633,7 +620,8 @@ const updatePrices = async () => {
       res.json({
           nvidia: !!process.env.NVIDIA_API_KEY,
           bybit: false,
-          polygon: !!process.env.POLYGON_API_KEY,
+          // Removed polygon reference
+
           finnhub: !!process.env.FINNHUB_API_KEY,
           ctrader: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET),
           ctrader_needs_auth: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET && !process.env.CTRADER_ACCESS_TOKEN)

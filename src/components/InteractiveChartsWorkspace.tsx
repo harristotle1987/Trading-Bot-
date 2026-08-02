@@ -667,15 +667,15 @@ let wsInterval = timeframe;
             <div className="flex items-center gap-4">
               <span className="font-mono text-lg font-bold text-white">{selectedSymbol}</span>
               <div className="flex bg-[#0B0E13] border border-[#232833] rounded overflow-hidden">
+              <select
+                className="bg-[#0B0E13] border border-[#232833] text-[#E6E9EF] px-2 py-1 rounded font-mono font-bold text-xs outline-none"
+                value={timeframe}
+                onChange={(e) => handleSetTimeframe(e.target.value)}
+              >
                 {['1s', '1m', '5m', '15m', '1h', '4h', '6h', '12h', '1d', '1year'].map(tf => (
-                  <button
-                    key={tf}
-                    className={`px-3 py-0.5 text-xs font-bold transition-colors font-mono ${timeframe === tf ? 'bg-[#3DDBD9] text-[#0B0C10]' : 'text-[#838C9C] hover:bg-[#1F2833]'}`}
-                    onClick={() => handleSetTimeframe(tf)}
-                  >
-                    {tf}
-                  </button>
+                  <option key={tf} value={tf}>{tf}</option>
                 ))}
+              </select>
               </div>
               <span className="text-xs text-[#00E676] font-mono flex items-center gap-1.5 hidden sm:flex">
                 <span className="w-2 h-2 rounded-full bg-[#00E676] animate-pulse"></span>
