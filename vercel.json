@@ -7,7 +7,7 @@
   "functions": {
     "api/index.js": {
       "includeFiles": [
-        "node_modules/@reiryoku/ctrader-layer/**/*.proto",
+        "node_modules/@reiryoku/ctrader-layer/protobuf/*",
         "firebase-applet-config.json"
       ]
     }
