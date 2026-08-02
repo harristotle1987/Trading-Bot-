@@ -1768,6 +1768,5 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   }
 }
 
-startServer();
-
+export const initPromise = startServer();
 export default app;
