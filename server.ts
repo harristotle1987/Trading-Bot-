@@ -374,16 +374,16 @@ const updatePrices = async () => {
   });
 
   let orders: any[] = [];
-  let positions: any[] = [];
+  let GLOBAL_POSITIONS: any[] = [];
+  let positions: any[] = GLOBAL_POSITIONS;
   let nextOrderId = 1;
   
-  let GLOBAL_POSITIONS: any[] = [];
   let nextPosId = 1;
 
   if (db) {
       getDoc(doc(db, "system", "trades")).then(snap => {
           if (snap.exists() && snap.data().positions) {
-              GLOBAL_POSITIONS = snap.data().positions;
+              GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
               nextPosId = GLOBAL_POSITIONS.length + 1;
               console.log("Loaded " + GLOBAL_POSITIONS.length + " trades from Firestore");
           }
