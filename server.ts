@@ -243,9 +243,6 @@ const updatePrices = async () => {
   updatePrices();
 
   app.get("/api/account/balances", async (req, res) => {
-      if (process.env.NODE_ENV === 'production') {
-        return res.status(503).json({ error: "Service unavailable in production" });
-      }
       console.log("Fetching balances... started");
       // Demo Capital Engine
       const demo_data = {
@@ -947,9 +944,6 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
   
   app.get("/api/trades/active", async (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(503).json({ error: "Service unavailable in production" });
-    }
     console.log("Fetching active trades, query:", req.query);
     const mode = req.query.account_mode;
     
@@ -962,9 +956,6 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
 
   app.get("/api/trades/closed", (req, res) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(503).json({ error: "Service unavailable in production" });
-    }
     console.log("Fetching closed trades...");
     try {
         console.log("GLOBAL_POSITIONS type:", typeof GLOBAL_POSITIONS);
