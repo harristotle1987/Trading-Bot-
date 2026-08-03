@@ -158,7 +158,7 @@ async function startServer() {
       }
   };
   
-  if (!process.env.VERCEL) setupCTrader();
+  if (process.env.NODE_ENV !== "production") setupCTrader();
 
 const updatePrices = async () => {
       const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT"];
@@ -237,6 +237,9 @@ const updatePrices = async () => {
   updatePrices();
 
   app.get("/api/account/balances", async (req, res) => {
+      if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: "Service unavailable in production" });
+      }
       console.log("Fetching balances... started");
       // Demo Capital Engine
       const demo_data = {
@@ -599,7 +602,7 @@ const updatePrices = async () => {
       if (ctrader_client_secret) process.env.CTRADER_CLIENT_SECRET = ctrader_client_secret;
       if (ctrader_access_token) {
           process.env.CTRADER_ACCESS_TOKEN = ctrader_access_token;
-          if (!process.env.VERCEL) setupCTrader();
+          if (process.env.NODE_ENV !== "production") setupCTrader();
       }
       res.json({ status: "success" });
   });
@@ -638,7 +641,7 @@ const updatePrices = async () => {
               process.env.CTRADER_ACCESS_TOKEN = token;
               
               // Restart cTrader connection with new token
-              if (!process.env.VERCEL) setupCTrader();
+              if (process.env.NODE_ENV !== "production") setupCTrader();
 
               res.send(`
                 <html>
@@ -938,6 +941,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
   
   app.get("/api/trades/active", async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: "Service unavailable in production" });
+    }
     console.log("Fetching active trades, query:", req.query);
     const mode = req.query.account_mode;
     
@@ -950,6 +956,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
 
   app.get("/api/trades/closed", (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(503).json({ error: "Service unavailable in production" });
+    }
     console.log("Fetching closed trades...");
     try {
         console.log("GLOBAL_POSITIONS type:", typeof GLOBAL_POSITIONS);
