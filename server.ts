@@ -10,7 +10,7 @@ import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
 
-const app = express();
+const app = express(); app.use((req, res, next) => { console.log("Request:", req.method, req.url); next(); });
 async function startServer() {
   const PORT = 3000;
 
@@ -158,7 +158,7 @@ async function startServer() {
       }
   };
   
-  setupCTrader();
+  if (!process.env.VERCEL) setupCTrader();
 
 const updatePrices = async () => {
       const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT"];
@@ -233,7 +233,7 @@ const updatePrices = async () => {
       }
   };
   
-  setInterval(updatePrices, 3000); // Update every 3s
+  if (!process.env.VERCEL) setInterval(updatePrices, 3000); // Update every 3s
   updatePrices();
 
   app.get("/api/account/balances", async (req, res) => {
@@ -331,9 +331,13 @@ const updatePrices = async () => {
   }
 
   const saveTrades = () => {
-      if (db) {
-          const cleanPositions = JSON.parse(JSON.stringify(GLOBAL_POSITIONS));
-          setDoc(doc(db, "system", "trades"), { positions: cleanPositions }).catch(console.error);
+      try {
+          if (db) {
+              const cleanPositions = JSON.parse(JSON.stringify(GLOBAL_POSITIONS));
+              setDoc(doc(db, "system", "trades"), { positions: cleanPositions }).catch(console.error);
+          }
+      } catch (e) {
+          console.error("Sync error in saveTrades:", e);
       }
   };
 
@@ -595,7 +599,7 @@ const updatePrices = async () => {
       if (ctrader_client_secret) process.env.CTRADER_CLIENT_SECRET = ctrader_client_secret;
       if (ctrader_access_token) {
           process.env.CTRADER_ACCESS_TOKEN = ctrader_access_token;
-          setupCTrader();
+          if (!process.env.VERCEL) setupCTrader();
       }
       res.json({ status: "success" });
   });
@@ -634,7 +638,7 @@ const updatePrices = async () => {
               process.env.CTRADER_ACCESS_TOKEN = token;
               
               // Restart cTrader connection with new token
-              setupCTrader();
+              if (!process.env.VERCEL) setupCTrader();
 
               res.send(`
                 <html>
@@ -699,15 +703,15 @@ const updatePrices = async () => {
   
 
   app.get("/api/agent-workspace/scan", async (req, res) => {
-    const mode = req.query.mode || "DEMO";
+    try { const mode = req.query.mode || "DEMO";
     
     // Simulating deep forensic scan
     await new Promise(r => setTimeout(r, 800)); // Simulating thorough I/O
     
-    const solPrice = GLOBAL_PRICES["SOLUSDT"] || 142.50;
-    const eurPrice = GLOBAL_PRICES["EURUSD"] || 1.0850;
-    const ethPrice = GLOBAL_PRICES["ETHUSDT"] || 3450.00;
-    const dotPrice = GLOBAL_PRICES["DOTUSDT"] || 7.20;
+    const solPrice = Number(GLOBAL_PRICES["SOLUSDT"] || 142.50);
+    const eurPrice = Number(GLOBAL_PRICES["EURUSD"] || 1.0850);
+    const ethPrice = Number(GLOBAL_PRICES["ETHUSDT"] || 3450.00);
+    const dotPrice = Number(GLOBAL_PRICES["DOTUSDT"] || 7.20);
 
     const sample_recommendations = [
         {
@@ -761,6 +765,10 @@ const updatePrices = async () => {
         active_mode: (mode as string).toUpperCase(),
         recommended_pairs: sample_recommendations
     });
+    } catch (err) {
+        console.error("Error in scan route:", err);
+        res.status(500).json({ error: "Scan error" });
+    }
   });
 
   app.get("/api/agent-workspace/demo/account", (req, res) => {
@@ -1574,7 +1582,7 @@ if (isForex || category === 'stocks') {
       }
   };
 
-  setInterval(managePositionsEngine, 3000);
+  if (!process.env.VERCEL) setInterval(managePositionsEngine, 3000);
 
   const runAutoTrade = async () => {
       if (agentState.status !== "RUNNING") return;
@@ -1689,7 +1697,7 @@ if (isForex || category === 'stocks') {
       setTimeout(runAutoTrade, 5000); // Wait 5s before next loop
   };
 
-  runAutoTrade();
+  if (!process.env.VERCEL) runAutoTrade();
 
   // Vite middleware for development and static serving for production
   if (process.env.NODE_ENV !== "production") {
