@@ -11,6 +11,12 @@ import { CTraderConnection } from "@reiryoku/ctrader-layer";
 dotenv.config();
 
 const app = express(); app.use((req, res, next) => { console.log("Request:", req.method, req.url); next(); });
+app.use('/api/', (req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    next();
+});
 async function startServer() {
   const PORT = 3000;
 

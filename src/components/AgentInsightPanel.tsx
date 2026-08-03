@@ -29,7 +29,7 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
     const fetchSignals = async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/agent-workspace/scan");
+        const res = await fetch("/api/agent-workspace/scan", { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           const mappedSignals: TradeSignal[] = data.recommended_pairs.map((p: any) => ({
@@ -59,7 +59,7 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
     const fetchNews = async () => {
       setSentimentLoading(true);
       try {
-        const res = await fetch(`/api/ai/finnhub-news?symbol=${selectedSymbol}`);
+        const res = await fetch(`/api/ai/finnhub-news?symbol=${selectedSymbol}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           if (data && data.length > 0) {

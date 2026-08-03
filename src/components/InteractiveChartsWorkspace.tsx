@@ -46,7 +46,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
     setIsScanning(true);
     toast("Initiating AI agent forensics scan...");
     try {
-      const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}`);
+      const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (res.ok) {
@@ -65,7 +65,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
 
   const fetchBalances = async () => {
     try {
-      const res = await fetch("/api/account/balances");
+      const res = await fetch("/api/account/balances", { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setDemoBalance(data.demo.available_balance);
@@ -77,7 +77,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
 
   const fetchActiveTrades = async () => {
       try {
-          const res = await fetch("/api/trades/active");
+          const res = await fetch("/api/trades/active", { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
           if (res.ok) {
@@ -90,7 +90,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
 
   const fetchClosedTrades = async () => {
       try {
-          const res = await fetch("/api/trades/closed");
+          const res = await fetch("/api/trades/closed", { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
           if (res.ok) {
@@ -234,6 +234,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const res = await fetch("/api/agent-workspace/demo/place-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: 'no-store',
         body: JSON.stringify({
           symbol: pair.symbol,
           side: pair.directional_bias.includes("BUY") ? "BUY" : "SELL",
@@ -264,6 +265,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const res = await fetch("/api/agent-workspace/live/place-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: 'no-store',
         body: JSON.stringify({
           symbol: pair.symbol,
           side: pair.directional_bias.includes("BUY") ? "BUY" : "SELL",
@@ -380,7 +382,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
             }
         }
 
-        const bybitRes = await fetch(`/api/market/kline?category=${categoryParam}&symbol=${selectedSymbol}&interval=${intervalParams}&limit=500`);
+        const bybitRes = await fetch(`/api/market/kline?category=${categoryParam}&symbol=${selectedSymbol}&interval=${intervalParams}&limit=500`, { cache: 'no-store' });
         if (!bybitRes.ok) throw new Error(`HTTP ${bybitRes.status}`);
         const bybitData = await bybitRes.json();
         if (bybitData.retCode === 0 && bybitData.result?.list) {
@@ -458,7 +460,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
           const updateInterval = setInterval(async () => {
               if (!isMounted) return clearInterval(updateInterval);
               try {
-                  const res = await fetch('/api/market/prices');
+                  const res = await fetch('/api/market/prices', { cache: 'no-store' });
                   if (!res.ok) return;
                   const data = await res.json();
                   if (data[selectedSymbol]) {
