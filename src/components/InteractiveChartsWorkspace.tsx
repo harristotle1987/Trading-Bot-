@@ -24,6 +24,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   const [recommendations, setRecommendations] = useState<RecommendedPair[]>([]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [demoBalance, setDemoBalance] = useState<number>(10000.00);
+  const [liveBalance, setLiveBalance] = useState<number>(50000.00);
   const [activeTrades, setActiveTrades] = useState<any[]>([]);
   const [closedTrades, setClosedTrades] = useState<any[]>([]);
 
@@ -62,14 +63,15 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
     }
   };
 
-  const fetchDemoBalance = async () => {
+  const fetchBalances = async () => {
     try {
-      const res = await fetch("/api/agent-workspace/demo/account");
+      const res = await fetch("/api/account/balances");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setDemoBalance(data.balance);
+      setDemoBalance(data.demo.available_balance);
+      setLiveBalance(data.live.available_balance);
     } catch (err) {
-      console.warn("Failed to fetch demo balance:", err);
+      console.warn("Failed to fetch balances:", err);
     }
   };
 
@@ -100,7 +102,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   };
 
   useEffect(() => {
-    fetchDemoBalance();
+    fetchBalances();
     fetchActiveTrades();
     fetchClosedTrades();
     const interval = setInterval(() => {
@@ -245,7 +247,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const data = await res.json();
       if (res.ok) {
         toast.success(`[DEMO MODE] ${data.message || 'Trade executed successfully'}`);
-        fetchDemoBalance();
+        fetchBalances();
       } else {
         toast.error(`[DEMO MODE] Error: ${data.error || 'Failed to place order'}`);
       }
@@ -275,6 +277,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const data = await res.json();
       if (res.ok) {
         toast.success(`[LIVE MODE] ${data.message || 'Trade executed successfully'}`);
+        fetchBalances();
       } else {
         toast.error(`[LIVE MODE] Error: ${data.error || 'Failed to place order'}`);
       }
@@ -326,13 +329,19 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
     chartRef.current = chart;
     seriesRef.current = candlestickSeriesInstance;
 
-    const handleResize = () => {
-      chart.applyOptions({
-        width: chartContainerRef.current?.clientWidth ?? 800,
-        height: chartContainerRef.current?.clientHeight ?? 600,
+    const handleResize = (entries: ResizeObserverEntry[]) => {
+      window.requestAnimationFrame(() => {
+        if (!chartContainerRef.current) return;
+        const newRect = entries[0].contentRect;
+        chart.applyOptions({
+          width: newRect.width,
+          height: newRect.height,
+        });
       });
     };
-    window.addEventListener("resize", handleResize);
+    
+    const resizeObserver = new ResizeObserver(handleResize);
+    resizeObserver.observe(chartContainerRef.current);
 
     // Fetch Historical Data backfill
     const fetchData = async () => {
@@ -537,6 +546,7 @@ let wsInterval = timeframe;
     return () => {
       isMounted = false;
       if (ws) ws.close();
+      if (resizeObserver) resizeObserver.disconnect();
       if (chart) {
         try {
             chart.remove();
@@ -577,6 +587,9 @@ let wsInterval = timeframe;
               {tradeModal.mode === "DEMO" && tradeModal.amount > demoBalance && (
                 <p className="text-[#FF1744] text-xs mt-1 font-mono">Amount exceeds available demo balance (${demoBalance.toLocaleString()})</p>
               )}
+              {tradeModal.mode === "LIVE" && tradeModal.amount > liveBalance && (
+                <p className="text-[#FF1744] text-xs mt-1 font-mono">Amount exceeds available live balance (${liveBalance.toLocaleString()})</p>
+              )}
             </div>
             
             <div className="flex gap-3 justify-end">
@@ -592,7 +605,7 @@ let wsInterval = timeframe;
                   else executeLiveTrade(tradeModal.pair!, tradeModal.amount);
                   setTradeModal({...tradeModal, isOpen: false, pair: null});
                 }}
-                disabled={tradeModal.mode === "DEMO" && tradeModal.amount > demoBalance}
+                disabled={(tradeModal.mode === "DEMO" && tradeModal.amount > demoBalance) || (tradeModal.mode === "LIVE" && tradeModal.amount > liveBalance)}
                 className="px-4 py-2 font-bold uppercase tracking-wider text-[#0B0C10] bg-[#3DDBD9] hover:bg-[#2CBDBA] transition-all rounded text-xs shadow-[0_0_10px_rgba(61,219,217,0.3)] font-mono disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Confirm Trade
@@ -689,7 +702,7 @@ let wsInterval = timeframe;
               </span>
             </div>
             <div className="text-xs font-mono text-gray-400 hidden sm:block">
-              Demo Balance: <span className="text-white">${demoBalance.toLocaleString()} USDT</span>
+              {activeMode === "DEMO" ? "Demo" : "Live"} Balance: <span className="text-white">${(activeMode === "DEMO" ? demoBalance : liveBalance).toLocaleString()} USDT</span>
             </div>
           </div>
           <div className="flex-1 w-full relative" ref={chartContainerRef}>

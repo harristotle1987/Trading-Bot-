@@ -5,7 +5,7 @@ import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { initializeApp } from "firebase/app";
-import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "firebase/firestore";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
@@ -28,16 +28,16 @@ async function startServer() {
           const firebaseApp = initializeApp(config);
           db = getFirestore(firebaseApp, config.firestoreDatabaseId);
 
-          getDoc(doc(db, "system", "balances")).then(snap => {
+          onSnapshot(doc(db, "system", "balances"), (snap) => {
               if (snap.exists()) {
                   demoBalance = snap.data().demoBalance ?? 10000;
                   liveBalance = snap.data().liveBalance ?? 50000.0;
+                  console.log("Synced balances from Firestore:", demoBalance, liveBalance);
               } else {
                   setDoc(doc(db, "system", "balances"), { demoBalance, liveBalance });
               }
-              console.log("Loaded demoBalance from Firestore:", demoBalance, "liveBalance:", liveBalance);
-          }).catch(err => {
-              console.error("Error loading demoBalance from Firestore:", err);
+          }, (err: any) => {
+              console.error("Error loading balances from Firestore:", err);
           });
       }
   } catch (err) {
@@ -165,22 +165,29 @@ const updatePrices = async () => {
       const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
       const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META"];
       
+      const forexFallbacks: Record<string, number> = {
+        "EURUSD": 1.0850, "GBPUSD": 1.2850, "USDJPY": 150.00, "AUDUSD": 0.6700,
+        "USDCAD": 1.3600, "USDCHF": 0.9200, "NZDUSD": 0.6100, "EURGBP": 0.8400,
+        "EURJPY": 160.00, "GBPJPY": 185.00, "AUDJPY": 95.00, "EURAUD": 1.6500,
+        "GBPCAD": 1.7500, "CADJPY": 105.00, "CHFJPY": 170.00
+      };
+
       try {
-// Crypto & Forex from Finnhub if available
-          if (process.env.FINNHUB_API_KEY) {
-              // Finnhub Crypto
-              for (const s of cryptoSymbols) {
-                  try {
-                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:${s}&token=${process.env.FINNHUB_API_KEY}`);
-                      if (finnhubRes.ok) {
-                          const data = await finnhubRes.json();
-                          if (data && data.c) GLOBAL_PRICES[s] = data.c;
-                      }
-                      await new Promise(r => setTimeout(r, 35)); // avoid rate limit (30 API calls/sec for free tier)
-                  } catch (e) {
-                      console.warn(`Finnhub fetch failed for ${s}`);
+          // Always fetch Crypto from Binance directly (fast, free, accurate, no rate limits for this volume)
+          try {
+              const binanceRes = await fetch("https://api.binance.com/api/v3/ticker/price");
+              if (binanceRes.ok) {
+                  const binanceData = await binanceRes.json();
+                  for (const s of cryptoSymbols) {
+                      const ticker = binanceData.find((t: any) => t.symbol === s);
+                      if (ticker) GLOBAL_PRICES[s] = parseFloat(ticker.price);
                   }
               }
+          } catch (e) {
+              console.warn("Binance fetch failed", e);
+          }
+
+          if (process.env.FINNHUB_API_KEY) {
               // Finnhub Forex
               for (const s of forexSymbols) {
                   try {
@@ -208,75 +215,19 @@ const updatePrices = async () => {
                       console.warn(`Finnhub fetch failed for ${s}`);
                   }
               }
-
-          } else {
-              // Fallback to Binance for Crypto
-              try {
-                  const binanceRes = await fetch("https://api.binance.com/api/v3/ticker/price");
-                  if (binanceRes.ok) {
-                      const binanceData = await binanceRes.json();
-                      for (const s of cryptoSymbols) {
-                          const ticker = binanceData.find((t: any) => t.symbol === s);
-                          if (ticker) GLOBAL_PRICES[s] = parseFloat(ticker.price);
-                      }
-                  }
-              } catch (e) {
-                  console.warn("Binance fallback failed", e);
-              }
-          }
-
-          // Forex from Polygon as secondary fallback
-          const forexFallbacks: Record<string, number> = {
-            "EURUSD": 1.0850, "GBPUSD": 1.2850, "USDJPY": 150.00, "AUDUSD": 0.6700,
-            "USDCAD": 1.3600, "USDCHF": 0.9200, "NZDUSD": 0.6100, "EURGBP": 0.8400,
-            "EURJPY": 160.00, "GBPJPY": 185.00, "AUDJPY": 95.00, "EURAUD": 1.6500,
-            "GBPCAD": 1.7500, "CADJPY": 105.00, "CHFJPY": 170.00
-          };
-          
-          if (process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET) {
-              for (const s of forexSymbols) {
-                  if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
-              }
-          } else if (!process.env.FINNHUB_API_KEY && process.env.POLYGON_API_KEY) { } else if (process.env.POLYGON_API_KEY) {
-              let keyForbidden = false;
-              for (const s of forexSymbols) {
-                  if (keyForbidden) {
-                      if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
-                      else GLOBAL_PRICES[s] += GLOBAL_PRICES[s] * (Math.random() * 0.0001 * 2 - 0.0001);
-                      continue;
-                  }
-                  
-                  // Finnhub or fallbacks
-                  try {
-                      // Finnhub fetch for forex/indices
-                      const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=OANDA:${s}&token=${process.env.FINNHUB_API_KEY}`);
-                      const data = await res.json();
-                      if (data.c) {
-                          GLOBAL_PRICES[s] = data.c;
-                          console.log(`Updated price for ${s}: ${data.c}`);
-                      } else {
-                          console.warn(`No price for ${s} from Finnhub:`, data);
-                          throw new Error("No price from Finnhub");
-                      }
-                  } catch (e) {
-                      console.error(`Finnhub fetch failed for ${s}:`, e);
-                      if (!GLOBAL_PRICES[s]) GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
-                      else GLOBAL_PRICES[s] += GLOBAL_PRICES[s] * (Math.random() * 0.0001 * 2 - 0.0001);
-                  }
-              }
-          } else {
-            forexSymbols.forEach(s => {
-                if (!GLOBAL_PRICES[s]) {
-                    GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
-                } else {
-                    // Simulate random tick movement if no live API
-                    const volatility = 0.0001;
-                    const change = GLOBAL_PRICES[s] * (Math.random() * volatility * 2 - volatility);
-                    GLOBAL_PRICES[s] = GLOBAL_PRICES[s] + change;
-                }
-            });
           }
           
+          // Apply fallbacks and simulate movement ONLY for symbols that don't have a valid price from the API
+          forexSymbols.forEach(s => {
+              if (!GLOBAL_PRICES[s]) {
+                  GLOBAL_PRICES[s] = forexFallbacks[s] || 1.0;
+              } else if (!process.env.FINNHUB_API_KEY) {
+                  // Simulate random tick movement if no live API
+                  const volatility = 0.0001;
+                  const change = GLOBAL_PRICES[s] * (Math.random() * volatility * 2 - volatility);
+                  GLOBAL_PRICES[s] = GLOBAL_PRICES[s] + change;
+              }
+          });
       } catch (e) {
           console.error("Failed to update prices:", e);
       }
@@ -335,12 +286,12 @@ const updatePrices = async () => {
   };
 
   if (db) {
-      getDoc(doc(db, "system", "riskSettings")).then(snap => {
+      onSnapshot(doc(db, "system", "riskSettings"), (snap) => {
           if (snap.exists()) {
               riskSettings = { ...riskSettings, ...snap.data() };
-              console.log("Loaded riskSettings from Firestore");
+              console.log("Synced riskSettings from Firestore");
           }
-      }).catch(err => console.error("Error loading riskSettings:", err));
+      }, (err: any) => console.error("Error loading riskSettings:", err));
   }
 
   app.get("/api/risk/settings", (req, res) => {
@@ -370,17 +321,20 @@ const updatePrices = async () => {
   let nextPosId = 1;
 
   if (db) {
-      getDoc(doc(db, "system", "trades")).then(snap => {
+      getDoc(doc(db, "system", "trades")).then((snap) => {
           if (snap.exists() && snap.data().positions) {
               GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
               nextPosId = GLOBAL_POSITIONS.length + 1;
               console.log("Loaded " + GLOBAL_POSITIONS.length + " trades from Firestore");
           }
-      }).catch(err => console.error("Error loading trades:", err));
+      }).catch((err: any) => console.error("Error loading trades:", err));
   }
 
   const saveTrades = () => {
-      if (db) setDoc(doc(db, "system", "trades"), { positions: GLOBAL_POSITIONS }).catch(console.error);
+      if (db) {
+          const cleanPositions = JSON.parse(JSON.stringify(GLOBAL_POSITIONS));
+          setDoc(doc(db, "system", "trades"), { positions: cleanPositions }).catch(console.error);
+      }
   };
 
   app.get("/api/execution/positions", (req, res) => {
@@ -750,6 +704,11 @@ const updatePrices = async () => {
     // Simulating deep forensic scan
     await new Promise(r => setTimeout(r, 800)); // Simulating thorough I/O
     
+    const solPrice = GLOBAL_PRICES["SOLUSDT"] || 142.50;
+    const eurPrice = GLOBAL_PRICES["EURUSD"] || 1.0850;
+    const ethPrice = GLOBAL_PRICES["ETHUSDT"] || 3450.00;
+    const dotPrice = GLOBAL_PRICES["DOTUSDT"] || 7.20;
+
     const sample_recommendations = [
         {
             symbol: "SOLUSDT",
@@ -758,9 +717,9 @@ const updatePrices = async () => {
             win_rate_probability: 88.5,
             timeframe: "15m",
             reasoning: "High institutional volume confluence with favorable macro news trajectory.",
-            suggested_entry: 142.50,
-            suggested_sl: 139.80,
-            suggested_tp: 148.00
+            suggested_entry: parseFloat(solPrice.toFixed(2)),
+            suggested_sl: parseFloat((solPrice * 0.98).toFixed(2)),
+            suggested_tp: parseFloat((solPrice * 1.04).toFixed(2))
         },
         {
             symbol: "EURUSD",
@@ -769,9 +728,9 @@ const updatePrices = async () => {
             win_rate_probability: 84.2,
             timeframe: "15m",
             reasoning: "Rejection at 1.0880 resistance band + MACD bearish divergence, NIM sentiment confirms.",
-            suggested_entry: 1.0850,
-            suggested_sl: 1.0890,
-            suggested_tp: 1.0770
+            suggested_entry: parseFloat(eurPrice.toFixed(4)),
+            suggested_sl: parseFloat((eurPrice * 1.003).toFixed(4)),
+            suggested_tp: parseFloat((eurPrice * 0.992).toFixed(4))
         },
         {
             symbol: "ETHUSDT",
@@ -780,9 +739,9 @@ const updatePrices = async () => {
             win_rate_probability: 82.1,
             timeframe: "15m",
             reasoning: "Holding 200 EMA support + Positive Sentiment Score (+0.45), backed by Finnhub.",
-            suggested_entry: 3450.00,
-            suggested_sl: 3390.00,
-            suggested_tp: 3580.00
+            suggested_entry: parseFloat(ethPrice.toFixed(2)),
+            suggested_sl: parseFloat((ethPrice * 0.98).toFixed(2)),
+            suggested_tp: parseFloat((ethPrice * 1.04).toFixed(2))
         },
         {
             symbol: "DOTUSDT",
@@ -791,9 +750,9 @@ const updatePrices = async () => {
             win_rate_probability: 89.2,
             timeframe: "1h",
             reasoning: "Multi-timeframe (15m, 1h) accumulation + AI score 92.4, strong structural base.",
-            suggested_entry: 7.20,
-            suggested_sl: 6.85,
-            suggested_tp: 8.50
+            suggested_entry: parseFloat(dotPrice.toFixed(2)),
+            suggested_sl: parseFloat((dotPrice * 0.95).toFixed(2)),
+            suggested_tp: parseFloat((dotPrice * 1.10).toFixed(2))
         }
     ];
     
