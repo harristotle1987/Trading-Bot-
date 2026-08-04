@@ -25,7 +25,7 @@ export default function APIKeysModal() {
 
   const checkKeys = async () => {
     try {
-      const res = await fetch("/api/config/keys");
+      const res = await fetch("/api/config/keys", { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setStatus(data);

@@ -32,7 +32,7 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
 
   const fetchPositions = async () => {
     try {
-      const res = await fetch("/api/trades/active");
+      const res = await fetch("/api/trades/active", { cache: 'no-store' });
       if (!res.ok) {
         console.warn("API Error:", res.status, await res.text());
         return;

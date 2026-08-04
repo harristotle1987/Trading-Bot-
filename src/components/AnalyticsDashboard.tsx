@@ -10,8 +10,8 @@ export default function AnalyticsDashboard() {
     const fetchTrades = async () => {
       try {
         const [activeRes, closedRes] = await Promise.all([
-          fetch("/api/trades/active"),
-          fetch("/api/trades/closed")
+          fetch("/api/trades/active", { cache: 'no-store' }),
+          fetch("/api/trades/closed", { cache: 'no-store' })
         ]);
         if (activeRes.ok) setActiveTrades(await activeRes.json());
         if (closedRes.ok) setClosedTrades(await closedRes.json());

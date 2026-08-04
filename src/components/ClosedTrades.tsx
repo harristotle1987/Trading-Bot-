@@ -22,7 +22,7 @@ export default function ClosedTrades() {
 
   const fetchClosedTrades = async () => {
     try {
-      const res = await fetch("/api/trades/closed");
+      const res = await fetch("/api/trades/closed", { cache: 'no-store' });
       if (!res.ok) {
         throw new Error(`Failed to fetch: ${res.statusText}`);
       }

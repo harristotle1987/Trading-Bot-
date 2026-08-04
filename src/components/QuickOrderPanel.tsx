@@ -47,7 +47,7 @@ export default function QuickOrderPanel({ activeSymbol, accountMode }: { activeS
     };
 
     const prepareTrade = async (side: "BUY" | "SELL") => {
-        const res = await fetch("/api/market/prices");
+        const res = await fetch("/api/market/prices", { cache: 'no-store' });
         const prices = await res.json();
         const price = prices[activeSymbol] || 1;
         

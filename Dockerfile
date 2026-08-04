@@ -1,19 +1,21 @@
-FROM python:3.11-slim as builder
+FROM node:20-slim AS builder
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --user -r requirements.txt
+COPY package*.json ./
+RUN npm install
 
-FROM python:3.11-slim
-
-RUN groupadd -r appuser && useradd -r -g appuser appuser
-WORKDIR /app
-
-COPY --from=builder /root/.local /home/appuser/.local
 COPY . .
+RUN npm run build
 
-ENV PATH=/home/appuser/.local/bin:$PATH
-USER appuser
+FROM node:20-slim
 
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+WORKDIR /app
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+
+ENV NODE_ENV=production
+ENV PORT=3000
+EXPOSE 3000
+
+CMD ["npm", "run", "start"]

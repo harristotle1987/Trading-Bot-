@@ -8,7 +8,7 @@ export default function MarketTicker() {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        const res = await fetch("/api/market/prices");
+        const res = await fetch("/api/market/prices", { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
           setPrices(data);

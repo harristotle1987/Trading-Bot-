@@ -20,7 +20,7 @@ export default function TopNavbar() {
 
   const checkAuthStatus = async () => {
     try {
-      const res = await fetch("/api/config/keys");
+      const res = await fetch("/api/config/keys", { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setNeedsAuth(data.ctrader_needs_auth);
@@ -32,7 +32,7 @@ export default function TopNavbar() {
 
   const fetchBalances = async () => {
     try {
-      const res = await fetch("/api/account/balances");
+      const res = await fetch("/api/account/balances", { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setBalances(data);
