@@ -1,3 +1,13 @@
+
+import Pusher from 'pusher';
+const pusher = process.env.PUSHER_APP_ID ? new Pusher({
+  appId: process.env.PUSHER_APP_ID,
+  key: process.env.PUSHER_KEY,
+  secret: process.env.PUSHER_SECRET,
+  cluster: process.env.PUSHER_CLUSTER,
+  useTLS: true
+}) : null;
+
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -21,6 +31,37 @@ async function startServer() {
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
   // API Routes
+
+  app.post("/api/engine/tick", async (req, res) => {
+      console.log("Engine tick triggered by CRON");
+      try {
+          // 1. Update prices
+          await updatePrices();
+          
+          // 2. Manage open positions (SL/TP)
+          await managePositionsEngine();
+          
+          // 3. Run auto trade AI logic (one pass, no setTimeout)
+          if (agentState.status === "RUNNING") {
+              await runAutoTrade();
+          }
+
+          // 4. Broadcast updates via Pusher
+          if (pusher) {
+              pusher.trigger("trading-bot", "market-update", { prices: GLOBAL_PRICES });
+              pusher.trigger("trading-bot", "positions-update", { positions: GLOBAL_POSITIONS });
+          }
+
+          // 5. Save state to Firestore
+          saveTrades();
+          
+          res.json({ status: "success", message: "Tick executed", positions: GLOBAL_POSITIONS.length });
+      } catch (err: any) {
+          console.error("Tick error:", err);
+          res.status(500).json({ error: err.message });
+      }
+  });
+
   
 
   let demoBalance = 10000;
@@ -944,6 +985,14 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
   
   app.get("/api/trades/active", async (req, res) => {
+    if (process.env.VERCEL && db && GLOBAL_POSITIONS.length === 0) {
+        try {
+            const snap = await getDoc(doc(db, "system", "trades"));
+            if (snap.exists() && snap.data().positions) {
+                GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
+            }
+        } catch(e) {}
+    }
     console.log("Fetching active trades, query:", req.query);
     const mode = req.query.account_mode;
     
@@ -955,7 +1004,15 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     res.json(active);
   });
 
-  app.get("/api/trades/closed", (req, res) => {
+  app.get("/api/trades/closed", async (req, res) => {
+    if (process.env.VERCEL && db && GLOBAL_POSITIONS.length === 0) {
+        try {
+            const snap = await getDoc(doc(db, "system", "trades"));
+            if (snap.exists() && snap.data().positions) {
+                GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
+            }
+        } catch(e) {}
+    }
     console.log("Fetching closed trades...");
     try {
         console.log("GLOBAL_POSITIONS type:", typeof GLOBAL_POSITIONS);
@@ -1598,7 +1655,7 @@ if (isForex || category === 'stocks') {
       // Add random search delay: 5s to 1min
       const delay = Math.floor(Math.random() * (60000 - 5000 + 1) + 5000);
       console.log(`Auto-trading: Searching for trades (delay: ${delay}ms)`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      if (!process.env.VERCEL) await new Promise(resolve => setTimeout(resolve, delay));
       
       if (agentState.status !== "RUNNING") return; // Re-check after delay
       
@@ -1663,7 +1720,7 @@ if (isForex || category === 'stocks') {
                       if (tradeAmount > liveBalance) {
                           console.warn("Trade amount exceeds live balance, skipping trade.");
                           agentState.current_activity = "SEARCHING";
-                          setTimeout(runAutoTrade, 5000);
+                          if (!process.env.VERCEL) setTimeout(runAutoTrade, 5000);
                           return;
                       }
 
@@ -1700,7 +1757,7 @@ if (isForex || category === 'stocks') {
           console.error("Auto-trade engine error:", err);
       }
       agentState.current_activity = "SEARCHING";
-      setTimeout(runAutoTrade, 5000); // Wait 5s before next loop
+      if (!process.env.VERCEL) if (!process.env.VERCEL) setTimeout(runAutoTrade, 5000); // Wait 5s before next loop
   };
 
   if (!process.env.VERCEL) runAutoTrade();

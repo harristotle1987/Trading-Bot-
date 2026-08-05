@@ -1,3 +1,4 @@
+import { useRealtimeData } from "../hooks/useRealtimeData";
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 
@@ -46,9 +47,8 @@ export default function QuickOrderPanel({ activeSymbol, accountMode }: { activeS
         }
     };
 
+    const { prices } = useRealtimeData();
     const prepareTrade = async (side: "BUY" | "SELL") => {
-        const res = await fetch("/api/market/prices", { cache: 'no-store' });
-        const prices = await res.json();
         const price = prices[activeSymbol] || 1;
         
         // Use AI suggested TP/SL or default to 2% / 1% if not provided

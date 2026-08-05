@@ -1,28 +1,12 @@
 import React, { useState, useEffect } from "react";
+import { useRealtimeData } from "../hooks/useRealtimeData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function AnalyticsDashboard() {
-  const [activeTrades, setActiveTrades] = useState<any[]>([]);
-  const [closedTrades, setClosedTrades] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchTrades = async () => {
-      try {
-        const [activeRes, closedRes] = await Promise.all([
-          fetch("/api/trades/active", { cache: 'no-store' }),
-          fetch("/api/trades/closed", { cache: 'no-store' })
-        ]);
-        if (activeRes.ok) setActiveTrades(await activeRes.json());
-        if (closedRes.ok) setClosedTrades(await closedRes.json());
-      } catch (err) {
-        console.error("Failed to fetch trades for analytics", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTrades();
-  }, []);
+  const { positions } = useRealtimeData();
+  const activeTrades = positions.filter(p => p.status === 'OPEN');
+  const closedTrades = positions.filter(p => p.status === 'CLOSED');
+  const loading = false;
 
   // Compute stats
   const totalClosedPnL = closedTrades.reduce((sum, t) => sum + (t.realized_pnl || 0), 0);

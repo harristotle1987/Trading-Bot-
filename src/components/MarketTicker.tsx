@@ -1,27 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { useRealtimeData } from "../hooks/useRealtimeData";
 import { TRADABLE_PAIRS } from "../App";
 import { formatPrice } from "../utils";
 
 export default function MarketTicker() {
-  const [prices, setPrices] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    const fetchPrices = async () => {
-      try {
-        const res = await fetch("/api/market/prices", { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          setPrices(data);
-        }
-      } catch (err) {
-        console.warn("Ticker fetch error", err);
-      }
-    };
-    
-    fetchPrices();
-    const interval = setInterval(fetchPrices, 10000); // refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
+  const { prices } = useRealtimeData();
 
   return (
     <div className="w-full bg-[#0B0E13] border-b border-[#232833] overflow-hidden flex items-center h-[30px] flex-shrink-0">
