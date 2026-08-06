@@ -80,7 +80,6 @@ export default function TopNavbar() {
           <div className="font-mono font-bold text-white text-base tracking-wider flex items-center gap-2">
             <img src="/logo.png" alt="Logo" className="w-8 h-8" />
             <span className="w-2.5 h-2.5 rounded-full bg-[#00E676] inline-block animate-pulse"></span>
-            <span>OBSIDIAN<span className="text-[#FFD600]">.AI</span></span>
           </div>
       </div>
       {/* Capital & Mode Display Badges */}

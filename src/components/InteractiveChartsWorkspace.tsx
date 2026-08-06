@@ -45,6 +45,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
   const markersPluginRef = useRef<any>(null);
+  const prevPriceLinesSigRef = useRef<string>("");
 
   // Run Agent Scan
   const triggerAgentScan = async (overrideStrategies?: string[]) => {
@@ -100,6 +101,19 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   useEffect(() => {
       if (!seriesRef.current) return;
       
+      const relevantTrades = activeTrades.filter(t => t.symbol === selectedSymbol && t.account_mode === activeMode);
+      const relevantClosedTrades = closedTrades.filter(t => t.symbol === selectedSymbol && t.account_mode === activeMode);
+
+      const sig = [
+        selectedSymbol,
+        activeMode,
+        relevantTrades.map(t => `${t.id}_${t.side}_${t.entry_price}_${t.stop_loss}_${t.take_profit}`).join(';'),
+        relevantClosedTrades.map(t => `${t.id}_${t.opened_at}_${t.closed_at}_${t.realized_pnl}`).join(';')
+      ].join('||');
+
+      if (prevPriceLinesSigRef.current === sig) return;
+      prevPriceLinesSigRef.current = sig;
+
       // Remove old price lines
       priceLinesRef.current.forEach(line => {
           try { seriesRef.current?.removePriceLine(line); } catch (e) {}
@@ -107,7 +121,6 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       priceLinesRef.current = [];
 
       // Add new price lines for the selected symbol
-      const relevantTrades = activeTrades.filter(t => t.symbol === selectedSymbol && t.account_mode === activeMode);
       relevantTrades.forEach(trade => {
           const isBuy = trade.side === "BUY";
           
@@ -153,7 +166,6 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
 
       // Update Markers for Buy/Sell
       const markers: any[] = [];
-      const relevantClosedTrades = closedTrades.filter(t => t.symbol === selectedSymbol && t.account_mode === activeMode);
       
       const addMarker = (trade: any, type: "Entry" | "Exit") => {
           const time = Math.floor(new Date(type === "Entry" ? trade.opened_at : trade.closed_at).getTime() / 1000);

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { useRealtimeData } from '../hooks/useRealtimeData';
 
 const ALL_STRATEGIES = [
   { id: "SWING_TRADING", name: "Swing Trading (4H/1D)", baseWin: 86.8, color: "#3DDBD9", desc: "Fib Retracements & Multi-Day Momentum" },
@@ -24,8 +25,46 @@ export default function AgentControlPanel() {
     GRID_TRADING: 50
   });
   const [compositeAnalytics, setCompositeAnalytics] = useState<any>(null);
-  const [prices, setPrices] = useState<Record<string, number>>({});
-  const wsRef = useRef<WebSocket | null>(null);
+  const { prices } = useRealtimeData();
+
+  // Agent Status Engine State
+  const [agentStatus, setAgentStatus] = useState<any>({
+    status: "IDLE",
+    current_activity: "IDLE",
+    uptime: 0,
+    loop_latency: 24,
+    total_trades: 0,
+    session_pnl: 0.0
+  });
+
+  const fetchAgentStatus = async () => {
+    try {
+      const res = await fetch("/api/agent/status");
+      if (res.ok) {
+        const data = await res.json();
+        setAgentStatus(data);
+      }
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchAgentStatus();
+    const interval = setInterval(fetchAgentStatus, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleAgentControl = async (action: 'start' | 'pause' | 'stop') => {
+    try {
+      const res = await fetch(`/api/agent/${action}`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        setAgentStatus(data);
+        toast.success(`Agent Engine state updated: ${action.toUpperCase()}`);
+      }
+    } catch (e) {
+      toast.error(`Failed to ${action} agent engine`);
+    }
+  };
 
   const fetchSignals = async (overrideStrats?: string[], overrideWeights?: Record<string, number>) => {
     const strats = overrideStrats || activeStrategies;
@@ -48,18 +87,22 @@ export default function AgentControlPanel() {
         setCompositeAnalytics(data.composite_analytics);
       }
       if (data.recommended_pairs && data.recommended_pairs.length > 0) {
-        setSignals(
-          data.recommended_pairs.map((pair: any) => ({
-            ...pair,
-            id: Math.random().toString(36).substr(2, 9),
-            amount: 100,
-            tp: pair.suggested_tp,
-            sl: pair.suggested_sl
-          }))
-        );
+        setSignals(prev => {
+          const existingMap = new Map<string, any>(prev.map((item: any) => [item.symbol, item]));
+          return data.recommended_pairs.map((pair: any) => {
+            const existing = existingMap.get(pair.symbol);
+            return {
+              ...pair,
+              id: existing?.id || pair.symbol,
+              amount: existing?.amount ?? 100,
+              tp: existing?.tp ?? pair.suggested_tp,
+              sl: existing?.sl ?? pair.suggested_sl
+            };
+          });
+        });
       }
     } catch (err) {
-      toast.error("Failed to fetch signal");
+      toast.error("Failed to fetch signals");
     } finally {
       setLoading(false);
     }
@@ -98,62 +141,6 @@ export default function AgentControlPanel() {
   };
 
   const totalActiveWeight = activeStrategies.reduce((sum, id) => sum + (strategyWeights[id] || 50), 0);
-
-  // Setup WebSocket for prices
-  useEffect(() => {
-    if (signals.length === 0) return;
-    
-    // Disconnect old WS if any
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
-    const cryptoSignals = signals.filter(s => s.category !== "FOREX");
-    const forexSignals = signals.filter(s => s.category === "FOREX");
-
-    // Crypto via Binance WebSocket
-    if (cryptoSignals.length > 0) {
-        const symbols = Array.from(new Set(cryptoSignals.map(s => s.symbol.toLowerCase())));
-        const streams = symbols.map(s => `${s}@ticker`).join('/');
-        const wsUrl = `wss://stream.binance.com:9443/ws/${streams}`;
-        
-        const ws = new WebSocket(wsUrl);
-        wsRef.current = ws;
-
-        ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          if (data.s && data.c) {
-            setPrices(prev => ({
-              ...prev,
-              [data.s.toUpperCase()]: parseFloat(data.c)
-            }));
-          }
-        };
-    }
-
-    // Forex via Simulated Ultra-High-Frequency (Finnhub proxy)
-    // Note: A real Finnhub token is required for wss://ws.finnhub.io
-    let forexInterval: any = null;
-    if (forexSignals.length > 0) {
-        forexInterval = setInterval(() => {
-            setPrices(prev => {
-                const updated = { ...prev };
-                forexSignals.forEach(s => {
-                    // Simulate millisecond-accurate top-of-book market values for Forex
-                    const basePrice = s.suggested_entry || 1.085;
-                    const noise = (Math.random() - 0.5) * 0.0004;
-                    updated[s.symbol] = parseFloat((basePrice + noise).toFixed(5));
-                });
-                return updated;
-            });
-        }, 300); // 300ms polling as ultra-high-frequency fallback
-    }
-
-    return () => {
-      if (wsRef.current) wsRef.current.close();
-      if (forexInterval) clearInterval(forexInterval);
-    };
-  }, [signals.length]);
 
   const handleExecute = async (signal: any) => {
     setLoading(true);
@@ -195,7 +182,7 @@ export default function AgentControlPanel() {
       toast.success(`Trade Executed for ${signal.symbol} at market price! [TP: $${formattedTp} | SL: $${formattedSl}]`);
       window.dispatchEvent(new CustomEvent("trade_updated"));
       window.dispatchEvent(new Event("balance_updated"));
-      setSignals(prev => prev.filter(s => s.id !== signal.id));
+      setSignals(prev => prev.filter(s => s.id !== signal.id && s.symbol !== signal.symbol));
     } catch (err: any) {
       toast.error(`Execution failed: ${err.message}`);
     } finally {
@@ -220,12 +207,62 @@ export default function AgentControlPanel() {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-[#0B0C10] text-[#E6E9EF] font-mono p-4 md:p-6 overflow-y-auto">
-      <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-6 pb-20">
-        <h1 className="text-3xl font-bold tracking-widest uppercase mb-2 text-white">Signal Bunker</h1>
-        <p className="text-xs text-[#838C9C] mb-6 tracking-wider text-center">
-          Multi-Strategy Weighting Engine • Configure strategy allocations to synthesize real factual win rates
-        </p>
+    <div className="flex flex-col w-full bg-[#0B0C10] text-[#E6E9EF] font-mono p-4 md:p-6 overflow-y-auto flex-1">
+      <div className="w-full max-w-5xl mx-auto flex flex-col items-center pt-2 pb-12">
+        <div className="w-full flex flex-col md:flex-row justify-between items-center mb-6 bg-[#12161D] border border-[#1F2833] p-4 rounded-xl gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-widest uppercase text-white flex items-center gap-2">
+              Signal Bunker
+              <span className={`text-xs px-2.5 py-0.5 rounded font-bold uppercase ${
+                agentStatus.status === "RUNNING" ? "bg-[#00E676]/20 text-[#00E676] border border-[#00E676]/40" :
+                agentStatus.status === "PAUSED" ? "bg-[#FFD600]/20 text-[#FFD600] border border-[#FFD600]/40" :
+                "bg-[#838C9C]/20 text-[#838C9C] border border-[#838C9C]/40"
+              }`}>
+                {agentStatus.status}
+              </span>
+            </h1>
+            <p className="text-xs text-[#838C9C] mt-1">
+              Multi-Strategy Weighting Engine • Real-time Confluence Scan
+            </p>
+          </div>
+
+          {/* Agent Engine Direct User Controls */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleAgentControl('start')}
+              disabled={agentStatus.status === "RUNNING"}
+              className={`px-3 py-1.5 rounded font-bold text-xs uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                agentStatus.status === "RUNNING"
+                  ? "bg-[#00E676]/20 text-[#00E676] border border-[#00E676]/30 cursor-default"
+                  : "bg-[#00E676] text-black hover:bg-opacity-90"
+              }`}
+            >
+              ▶ Start Engine
+            </button>
+            <button
+              onClick={() => handleAgentControl('pause')}
+              disabled={agentStatus.status === "PAUSED"}
+              className={`px-3 py-1.5 rounded font-bold text-xs uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                agentStatus.status === "PAUSED"
+                  ? "bg-[#FFD600]/20 text-[#FFD600] border border-[#FFD600]/30 cursor-default"
+                  : "bg-[#FFD600] text-black hover:bg-opacity-90"
+              }`}
+            >
+              ⏸ Pause
+            </button>
+            <button
+              onClick={() => handleAgentControl('stop')}
+              disabled={agentStatus.status === "IDLE"}
+              className={`px-3 py-1.5 rounded font-bold text-xs uppercase transition-all flex items-center gap-1 cursor-pointer ${
+                agentStatus.status === "IDLE"
+                  ? "bg-[#1F2833] text-[#838C9C] cursor-default"
+                  : "bg-[#FF1744] text-white hover:bg-opacity-90"
+              }`}
+            >
+              ⏹ Stop
+            </button>
+          </div>
+        </div>
 
         {/* Strategy Control Panel Section */}
         <div className="w-full bg-[#12161D] border border-[#1F2833] rounded-xl p-5 mb-8 shadow-2xl">
@@ -243,19 +280,19 @@ export default function AgentControlPanel() {
               <span className="text-[#838C9C] self-center mr-1 font-bold">Quick Presets:</span>
               <button
                 onClick={() => applyPreset(["TREND_FOLLOWING", "MEAN_REVERSION"], { TREND_FOLLOWING: 60, MEAN_REVERSION: 40 })}
-                className="px-2 py-1 rounded bg-[#1F2833] text-[#00E676] hover:bg-[#00E676] hover:text-black font-bold transition-all border border-[#00E676]/30"
+                className="px-2 py-1 rounded bg-[#1F2833] text-[#00E676] hover:bg-[#00E676] hover:text-black font-bold transition-all border border-[#00E676]/30 cursor-pointer"
               >
                 ⚡ Trend (60%) + Mean Rev (40%)
               </button>
               <button
                 onClick={() => applyPreset(["SMC_ICT", "ORDER_FLOW"], { SMC_ICT: 50, ORDER_FLOW: 50 })}
-                className="px-2 py-1 rounded bg-[#1F2833] text-[#66FCF1] hover:bg-[#66FCF1] hover:text-black font-bold transition-all border border-[#66FCF1]/30"
+                className="px-2 py-1 rounded bg-[#1F2833] text-[#66FCF1] hover:bg-[#66FCF1] hover:text-black font-bold transition-all border border-[#66FCF1]/30 cursor-pointer"
               >
                 💎 ICT (50%) + Order Flow (50%)
               </button>
               <button
                 onClick={() => applyPreset(["SWING_TRADING", "SMC_ICT", "TREND_FOLLOWING"], { SWING_TRADING: 40, SMC_ICT: 30, TREND_FOLLOWING: 30 })}
-                className="px-2 py-1 rounded bg-[#1F2833] text-[#FFD600] hover:bg-[#FFD600] hover:text-black font-bold transition-all border border-[#FFD600]/30"
+                className="px-2 py-1 rounded bg-[#1F2833] text-[#FFD600] hover:bg-[#FFD600] hover:text-black font-bold transition-all border border-[#FFD600]/30 cursor-pointer"
               >
                 🌊 Swing + ICT + Trend
               </button>
@@ -266,7 +303,7 @@ export default function AgentControlPanel() {
                   all.forEach(id => { equalWeights[id] = 50; });
                   applyPreset(all, equalWeights);
                 }}
-                className="px-2 py-1 rounded bg-gradient-to-r from-teal-500 to-amber-400 text-[#0B0C10] font-bold hover:opacity-90 transition-all"
+                className="px-2 py-1 rounded bg-gradient-to-r from-teal-500 to-amber-400 text-[#0B0C10] font-bold hover:opacity-90 transition-all cursor-pointer"
               >
                 🧱 All 6 Equal Weight
               </button>
@@ -315,7 +352,7 @@ export default function AgentControlPanel() {
                   <div className="flex items-center justify-between mb-2">
                     <button
                       onClick={() => toggleStrategy(strat.id)}
-                      className={`flex items-center gap-2 text-xs font-bold transition-colors ${
+                      className={`flex items-center gap-2 text-xs font-bold transition-colors cursor-pointer ${
                         isActive ? "text-white" : "text-[#838C9C]"
                       }`}
                     >
@@ -415,104 +452,109 @@ export default function AgentControlPanel() {
         <button 
           onClick={() => fetchSignals()} 
           disabled={loading}
-          className="mb-8 px-6 py-2.5 bg-[#66FCF1] text-[#0B0C10] font-bold hover:bg-[#66FCF1]/80 uppercase tracking-widest text-xs transition-colors rounded-lg shadow-[0_0_15px_rgba(102,252,241,0.2)] flex items-center gap-2"
+          className="mb-8 px-6 py-2.5 bg-[#66FCF1] text-[#0B0C10] font-bold hover:bg-[#66FCF1]/80 uppercase tracking-widest text-xs transition-colors rounded-lg shadow-[0_0_15px_rgba(102,252,241,0.2)] flex items-center gap-2 cursor-pointer disabled:opacity-50"
         >
-          <span>{loading ? "Scanning Strategy Models..." : "🔄 Run Confluence Signal Scan"}</span>
+          <span className={loading ? "animate-spin" : ""}>🔄</span>
+          <span>{loading ? "Scanning Strategy Models..." : "Run Confluence Signal Scan"}</span>
         </button>
         
         {signals.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full">
-            {signals.map(signal => (
-              <div key={signal.id} className="w-full bg-[#12161D] p-6 rounded-lg border border-[#1F2833] shadow-2xl flex flex-col">
-                <div className="flex justify-between items-start mb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+            {signals.map(signal => {
+              const livePrice = prices[signal.symbol] || signal.suggested_entry || 100;
+              return (
+                <div key={signal.id || signal.symbol} className="w-full bg-[#12161D] p-5 rounded-lg border border-[#1F2833] shadow-2xl flex flex-col justify-between">
                   <div>
-                    <span className="text-2xl font-bold text-white block">{signal.symbol}</span>
-                    <span className={`text-xl font-bold mt-1 block ${prices[signal.symbol] ? 'text-white' : 'text-[#838C9C] animate-pulse'}`}>
-                      {prices[signal.symbol] ? `$${prices[signal.symbol].toFixed(2)}` : 'Connecting WS...'}
-                    </span>
-                  </div>
-                  <span className={`text-sm px-3 py-1 rounded font-bold ${signal.directional_bias.includes("BUY") ? "bg-[#00E676] text-black" : "bg-[#FF1744] text-white"}`}>
-                    {signal.directional_bias}
-                  </span>
-                </div>
-                
-                <div className="text-sm text-[#838C9C] mb-4 flex-grow">
-                  <div className="flex justify-between items-center mb-2">
-                    <p>Calculated Win Rate: <span className="text-[#66FCF1] font-bold text-base">{signal.win_rate_probability}%</span></p>
-                    {signal.suggested_entry && (
-                      <span className="text-xs bg-[#1F2833] text-[#3DDBD9] px-2 py-0.5 rounded font-mono font-bold">
-                        Suggested Entry: ${signal.suggested_entry}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <span className="text-xl font-bold text-white block font-mono">{signal.symbol}</span>
+                        <span className="text-lg font-bold mt-0.5 block text-[#66FCF1] font-mono">
+                          ${livePrice.toFixed(signal.category === "FOREX" ? 4 : 2)}
+                        </span>
+                      </div>
+                      <span className={`text-xs px-2.5 py-1 rounded font-bold ${signal.directional_bias?.includes("BUY") ? "bg-[#00E676] text-black" : "bg-[#FF1744] text-white"}`}>
+                        {signal.directional_bias}
                       </span>
-                    )}
-                  </div>
-                  <p className="italic text-xs text-[#838C9C] leading-relaxed mb-4">{signal.reasoning}</p>
-
-                  {/* TP / SL Target Inputs */}
-                  <div className="grid grid-cols-2 gap-3 p-3 bg-[#0B0E13] rounded-lg border border-[#1F2833] mb-4">
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] uppercase text-[#00E676] font-bold">🎯 Target TP ($)</label>
-                        <span className="text-[9px] text-[#00E676]/70">Suggested</span>
+                    </div>
+                    
+                    <div className="text-xs text-[#838C9C] mb-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <p>Calculated Win Rate: <span className="text-[#66FCF1] font-bold text-sm">{signal.win_rate_probability}%</span></p>
+                        {signal.suggested_entry && (
+                          <span className="text-[10px] bg-[#1F2833] text-[#3DDBD9] px-2 py-0.5 rounded font-mono font-bold">
+                            Entry: ${signal.suggested_entry}
+                          </span>
+                        )}
                       </div>
+                      <p className="italic text-[11px] text-[#838C9C] leading-relaxed mb-4">{signal.reasoning}</p>
+
+                      {/* TP / SL Target Inputs */}
+                      <div className="grid grid-cols-2 gap-3 p-3 bg-[#0B0E13] rounded-lg border border-[#1F2833] mb-4">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[9px] uppercase text-[#00E676] font-bold">🎯 Target TP ($)</label>
+                          </div>
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={signal.tp ?? signal.suggested_tp ?? ''} 
+                            onChange={(e) => updateTp(signal.id, Number(e.target.value))} 
+                            className="w-full bg-[#12161D] text-[#00E676] font-bold text-xs p-2 rounded border border-[#00E676]/30 focus:border-[#00E676] outline-none"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="text-[9px] uppercase text-[#FF1744] font-bold">🛡️ Stop Loss ($)</label>
+                          </div>
+                          <input 
+                            type="number" 
+                            step="any"
+                            value={signal.sl ?? signal.suggested_sl ?? ''} 
+                            onChange={(e) => updateSl(signal.id, Number(e.target.value))} 
+                            className="w-full bg-[#12161D] text-[#FF1744] font-bold text-xs p-2 rounded border border-[#FF1744]/30 focus:border-[#FF1744] outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mb-5">
+                      <label className="block text-[10px] uppercase text-[#66FCF1] mb-1.5 font-bold">Capital Allocation ($)</label>
                       <input 
                         type="number" 
-                        step="any"
-                        value={signal.tp ?? signal.suggested_tp ?? ''} 
-                        onChange={(e) => updateTp(signal.id, Number(e.target.value))} 
-                        className="w-full bg-[#12161D] text-[#00E676] font-bold text-xs p-2 rounded border border-[#00E676]/30 focus:border-[#00E676] outline-none"
-                      />
-                    </div>
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] uppercase text-[#FF1744] font-bold">🛡️ Stop Loss ($)</label>
-                        <span className="text-[9px] text-[#FF1744]/70">Suggested</span>
-                      </div>
-                      <input 
-                        type="number" 
-                        step="any"
-                        value={signal.sl ?? signal.suggested_sl ?? ''} 
-                        onChange={(e) => updateSl(signal.id, Number(e.target.value))} 
-                        className="w-full bg-[#12161D] text-[#FF1744] font-bold text-xs p-2 rounded border border-[#FF1744]/30 focus:border-[#FF1744] outline-none"
+                        value={signal.amount ?? ''} 
+                        onChange={(e) => updateAmount(signal.id, Number(e.target.value))} 
+                        className="w-full bg-[#1F2833] text-white p-2.5 rounded border border-transparent focus:border-[#66FCF1] outline-none font-bold text-xs"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div className="mb-6">
-                  <label className="block text-xs uppercase text-[#66FCF1] mb-2 font-bold">Capital Allocation ($)</label>
-                  <input 
-                    type="number" 
-                    value={signal.amount ?? ''} 
-                    onChange={(e) => updateAmount(signal.id, Number(e.target.value))} 
-                    className="w-full bg-[#1F2833] text-white p-3 rounded border border-transparent focus:border-[#66FCF1] outline-none font-bold"
-                  />
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <button 
+                      onClick={() => handleExecute(signal)} 
+                      disabled={loading}
+                      className="py-2.5 bg-[#66FCF1] text-[#0B0C10] font-bold rounded text-xs uppercase hover:bg-opacity-90 transition-colors disabled:opacity-50 cursor-pointer"
+                    >
+                      Execute Position
+                    </button>
+                    <button 
+                      onClick={() => handleDiscard(signal.id)} 
+                      className="py-2.5 bg-[#1F2833] text-[#FF1744] font-bold rounded text-xs uppercase hover:bg-[#1F2833] hover:text-white transition-colors border border-[#FF1744]/40 cursor-pointer"
+                    >
+                      Discard Signal
+                    </button>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={() => handleExecute(signal)} 
-                    disabled={loading || !prices[signal.symbol]}
-                    className="py-3 bg-[#66FCF1] text-[#0B0C10] font-bold rounded uppercase hover:bg-opacity-90 transition-colors disabled:opacity-50"
-                  >
-                    Execute Position
-                  </button>
-                  <button 
-                    onClick={() => handleDiscard(signal.id)} 
-                    className="py-3 bg-[#1F2833] text-[#FF1744] font-bold rounded uppercase hover:bg-[#1F2833] hover:text-white transition-colors border border-[#FF1744]"
-                  >
-                    Discard Signal
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-[#838C9C] flex flex-col items-center justify-center h-48 border border-dashed border-[#1F2833] rounded-lg w-full">
-            <span className="animate-pulse mb-2">Scanning market logic...</span>
-            <span className="text-xs">Awaiting setup conditions</span>
+            <span className="mb-1 text-sm font-bold text-white">No signals loaded</span>
+            <span className="text-xs">Click "Run Confluence Signal Scan" to scan strategy models.</span>
           </div>
         )}
       </div>
     </div>
   );
 }
+
