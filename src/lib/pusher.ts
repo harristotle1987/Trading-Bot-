@@ -15,10 +15,20 @@ export const pusherServer = typeof process !== 'undefined' && process.env.PUSHER
 
 // Client instance (for Browser)
 // This uses Vite's import.meta.env for client-side environment variables.
+const getEnvVar = (key: string) => {
+    try {
+        if (typeof import.meta !== 'undefined' && import.meta.env) {
+            return import.meta.env[key] || '';
+        }
+    } catch (_) {}
+    if (typeof process !== 'undefined' && process.env) {
+        return process.env[key] || '';
+    }
+    return '';
+};
+
 export const pusherClient = typeof window !== 'undefined'
-    // @ts-ignore
-    ? new PusherClient(import.meta.env.VITE_PUSHER_KEY || '', {
-        // @ts-ignore
-        cluster: import.meta.env.VITE_PUSHER_CLUSTER || '',
+    ? new PusherClient(getEnvVar('VITE_PUSHER_KEY'), {
+        cluster: getEnvVar('VITE_PUSHER_CLUSTER'),
       })
     : null;
