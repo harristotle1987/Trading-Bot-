@@ -1,3 +1,5 @@
+const fs = require('fs');
+let code = `
 import { useState, useEffect } from 'react';
 import { pusherClient as pusherInstance } from '../lib/pusher';
 
@@ -41,3 +43,5 @@ export function useRealtimeData() {
 
     return data;
 }
+`;
+fs.writeFileSync('src/hooks/useRealtimeData.ts', code.trim());

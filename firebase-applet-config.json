@@ -1,10 +1,9 @@
 {
-  "projectId": "gen-lang-client-0502458518",
+  "projectId": "trading-bot-backend-ce93e",
   "appId": "1:413380032711:web:43cc21c15465df99aea6e2",
   "apiKey": "AIzaSyA3hqp3xNMTP-VCUQqBYcdypxHlhXDO5tQ",
-  "authDomain": "gen-lang-client-0502458518.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-obsidianprivatet-05d789cb-f4fa-4005-ac89-3796d54fe62c",
-  "storageBucket": "gen-lang-client-0502458518.firebasestorage.app",
+  "authDomain": "trading-bot-backend-ce93e.firebaseapp.com",
+  "storageBucket": "trading-bot-backend-ce93e.firebasestorage.app",
   "messagingSenderId": "413380032711",
   "measurementId": "",
   "oAuthClientId": "413380032711-okdmmche3p2s1j4e9jrs65p30iflbmjp.apps.googleusercontent.com",

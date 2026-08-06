@@ -7,7 +7,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 import { formatPrice } from "../utils";
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(app);
 
 interface Position {
   id: string;

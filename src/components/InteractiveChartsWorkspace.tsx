@@ -22,7 +22,9 @@ let globalPricesForChart: Record<string, number> = {};
 export default function InteractiveChartsWorkspace({ initialSymbol }: { initialSymbol?: string | null }) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const [selectedSymbol, setSelectedSymbol] = useState<string>(initialSymbol || "BTCUSDT");
-  const [timeframe, setTimeframe] = useState("15m");
+  const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["SWING_TRADING", "SMC_ICT"]);
+  const [showSwingResearch, setShowSwingResearch] = useState<boolean>(false);
+  const [timeframe, setTimeframe] = useState("4h");
   const [activeMode, setActiveMode] = useState<"DEMO" | "LIVE">("DEMO");
   const [recommendations, setRecommendations] = useState<RecommendedPair[]>([]);
   const [isScanning, setIsScanning] = useState<boolean>(false);
@@ -45,16 +47,18 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   const markersPluginRef = useRef<any>(null);
 
   // Run Agent Scan
-  const triggerAgentScan = async () => {
+  const triggerAgentScan = async (overrideStrategies?: string[]) => {
+    const strats = overrideStrategies || selectedStrategies;
+    const stratParam = strats.join(",");
     setIsScanning(true);
-    toast("Initiating AI agent forensics scan...");
+    toast(`Initiating AI agent scan combining [${strats.length > 1 ? strats.length + ' Strategies' : strats[0]}]...`);
     try {
-      const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}`, { cache: 'no-store' });
+      const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}&strategy=${encodeURIComponent(stratParam)}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (res.ok) {
         setRecommendations(data.recommended_pairs || []);
-        toast.success("Agent forensics scan complete");
+        toast.success(`Agent scan complete [${strats.length > 1 ? 'Multi-Strategy Confluence: ' + strats.join(' + ') : strats[0]}]`);
       } else {
         toast.error("Failed to run agent scan");
       }
@@ -596,67 +600,248 @@ let wsInterval = timeframe;
       )}
 
       {/* Top Header Bar */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b border-[#1F2833] pb-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[#E6E9EF] flex items-center gap-2">
-            <span>OBSIDIAN CHART WORKSTATION</span>
-            <span className="text-xs px-2 py-0.5 rounded border border-[#FFD600] text-[#FFD600] font-mono">
-              {activeMode} MODE
-            </span>
-          </h1>
-          <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
-            Active Symbol: 
-            <select
-                className="bg-[#12161D] border border-[#1F2833] text-white px-3 py-1 rounded font-mono font-bold outline-none cursor-pointer hover:border-[#3DDBD9] transition-all"
-                value={selectedSymbol}
-                onChange={(e) => setSelectedSymbol(e.target.value)}
-            >
-              <optgroup label="Crypto">
-                {TRADABLE_PAIRS.filter((p: any) => p.category === 'crypto').map((p: any) => (
-                  <option key={p.symbol} value={p.symbol}>{p.symbol}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Forex">
-                {TRADABLE_PAIRS.filter((p: any) => p.category === 'forex').map((p: any) => (
-                  <option key={p.symbol} value={p.symbol}>{p.symbol}</option>
-                ))}
-              </optgroup>
-            </select>
-          </p>
-        </div>
-
-        {/* Controls Bar */}
-        <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
-          {/* Mode Switcher */}
-          <div className="flex bg-[#12161D] border border-[#1F2833] rounded p-1">
-            <button
-              onClick={() => handleSetActiveMode("DEMO")}
-              className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
-                activeMode === "DEMO" ? "bg-[#00E676] text-[#0B0C10] font-bold" : "text-gray-400"
-              }`}
-            >
-              DEMO ($10,000)
-            </button>
-            <button
-              onClick={() => handleSetActiveMode("LIVE")}
-              className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
-                activeMode === "LIVE" ? "bg-[#FF1744] text-white font-bold" : "text-gray-400"
-              }`}
-            >
-              LIVE API
-            </button>
+      <header className="flex flex-col gap-4 mb-4 border-b border-[#1F2833] pb-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-[#E6E9EF] flex items-center gap-2">
+              <span>OBSIDIAN CHART WORKSTATION</span>
+              <span className="text-xs px-2 py-0.5 rounded border border-[#FFD600] text-[#FFD600] font-mono">
+                {activeMode} MODE
+              </span>
+            </h1>
+            <p className="text-xs text-gray-400 mt-1 flex items-center gap-2">
+              Active Symbol: 
+              <select
+                  className="bg-[#12161D] border border-[#1F2833] text-white px-3 py-1 rounded font-mono font-bold outline-none cursor-pointer hover:border-[#3DDBD9] transition-all"
+                  value={selectedSymbol}
+                  onChange={(e) => setSelectedSymbol(e.target.value)}
+              >
+                <optgroup label="Crypto">
+                  {TRADABLE_PAIRS.filter((p: any) => p.category === 'crypto').map((p: any) => (
+                    <option key={p.symbol} value={p.symbol}>{p.symbol}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Forex">
+                  {TRADABLE_PAIRS.filter((p: any) => p.category === 'forex').map((p: any) => (
+                    <option key={p.symbol} value={p.symbol}>{p.symbol}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </p>
           </div>
 
-          {/* Trigger Scan Button */}
-          <button
-            onClick={triggerAgentScan}
-            disabled={isScanning}
-            className="px-4 py-2 bg-[#FFD600] text-[#0B0C10] text-xs font-bold font-mono rounded hover:bg-yellow-400 transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(255,214,0,0.3)]"
-          >
-            {isScanning ? "SCANNING..." : "⚡ RUN AGENT FORENSICS"}
-          </button>
+          {/* Controls Bar */}
+          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+            <button
+              onClick={() => setShowSwingResearch(!showSwingResearch)}
+              className="px-3 py-1.5 bg-[#1F2833] hover:bg-[#3DDBD9] hover:text-[#0B0C10] text-[#3DDBD9] text-xs font-bold font-mono rounded border border-[#3DDBD9]/40 transition-all flex items-center gap-1.5"
+            >
+              📖 SWING TRADING RESEARCH & PLAYBOOK
+            </button>
+
+            {/* Mode Switcher */}
+            <div className="flex bg-[#12161D] border border-[#1F2833] rounded p-1">
+              <button
+                onClick={() => handleSetActiveMode("DEMO")}
+                className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                  activeMode === "DEMO" ? "bg-[#00E676] text-[#0B0C10] font-bold" : "text-gray-400"
+                }`}
+              >
+                DEMO ($10,000)
+              </button>
+              <button
+                onClick={() => handleSetActiveMode("LIVE")}
+                className={`px-3 py-1 text-xs font-mono rounded transition-colors ${
+                  activeMode === "LIVE" ? "bg-[#FF1744] text-white font-bold" : "text-gray-400"
+                }`}
+              >
+                LIVE API
+              </button>
+            </div>
+
+            {/* Trigger Scan Button */}
+            <button
+              onClick={() => triggerAgentScan()}
+              disabled={isScanning}
+              className="px-4 py-2 bg-[#FFD600] text-[#0B0C10] text-xs font-bold font-mono rounded hover:bg-yellow-400 transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(255,214,0,0.3)]"
+            >
+              {isScanning ? "SCANNING..." : "⚡ RUN AGENT FORENSICS"}
+            </button>
+          </div>
+        </div>
+
+        {/* AI Strategy Selection & Combination Toolbar */}
+        <div className="bg-[#12161D] border border-[#1F2833] rounded-lg p-3 flex flex-col gap-3 font-mono">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 border-b border-[#1F2833]/60 pb-2">
+            <div className="flex items-center gap-2 text-xs text-white font-bold">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#3DDBD9] animate-ping"></span>
+              <span>AI Multi-Strategy Confluence Engine:</span>
+              {selectedStrategies.length > 1 && (
+                <span className="px-2 py-0.5 rounded text-[10px] bg-[#3DDBD9]/20 text-[#3DDBD9] border border-[#3DDBD9]/40 font-bold animate-pulse">
+                  ⚡ {selectedStrategies.length} STRATEGIES COMBINED (+{(selectedStrategies.length * 3.5).toFixed(1)}% WIN CONFLUENCE BONUS)
+                </span>
+              )}
+            </div>
+
+            {/* Quick Multi-Strategy Presets */}
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <span className="text-gray-400">Quick Combinations:</span>
+              <button
+                onClick={() => {
+                  const combo = ["SWING_TRADING", "SMC_ICT"];
+                  setSelectedStrategies(combo);
+                  setTimeframe("4h");
+                  triggerAgentScan(combo);
+                }}
+                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#3DDBD9] hover:bg-[#3DDBD9] hover:text-[#0B0C10] transition-all font-bold"
+              >
+                🌊 Swing + ICT/SMC (4H)
+              </button>
+              <button
+                onClick={() => {
+                  const combo = ["SWING_TRADING", "SMC_ICT", "ORDER_FLOW"];
+                  setSelectedStrategies(combo);
+                  setTimeframe("4h");
+                  triggerAgentScan(combo);
+                }}
+                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#FFD600] hover:bg-[#FFD600] hover:text-[#0B0C10] transition-all font-bold"
+              >
+                📊 Swing + ICT + Order Flow
+              </button>
+              <button
+                onClick={() => {
+                  const combo = ["SWING_TRADING", "SMC_ICT", "MEAN_REVERSION", "ORDER_FLOW", "TREND_FOLLOWING", "GRID_TRADING"];
+                  setSelectedStrategies(combo);
+                  triggerAgentScan(combo);
+                }}
+                className="px-2 py-0.5 rounded bg-gradient-to-r from-teal-500 to-yellow-400 text-[#0B0C10] hover:opacity-90 transition-all font-bold"
+              >
+                ⚡ MAX CONFLUENCE (ALL 6)
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 text-xs w-full">
+            {[
+              { id: "SWING_TRADING", name: "🌊 Swing Trading (4H/1D)", desc: "Fib Retracements & Multi-Day Momentum" },
+              { id: "SMC_ICT", name: "⚡ ICT / SMC", desc: "Fair Value Gaps & Order Blocks" },
+              { id: "MEAN_REVERSION", name: "🔄 Mean Reversion", desc: "Bollinger & VWAP Overextension" },
+              { id: "ORDER_FLOW", name: "📊 Order Flow", desc: "Volume Delta Imbalance" },
+              { id: "TREND_FOLLOWING", name: "📈 Trend Breakout", desc: "20/50/200 EMA Golden Cross" },
+              { id: "GRID_TRADING", name: "🧱 Grid Harvesting", desc: "ATR Channel Multi-Tier Grid" },
+            ].map(strat => {
+              const isSelected = selectedStrategies.includes(strat.id);
+              return (
+                <button
+                  key={strat.id}
+                  onClick={() => {
+                    let nextStrats: string[];
+                    if (isSelected) {
+                      if (selectedStrategies.length === 1) {
+                        toast.error("At least 1 strategy model must remain selected.");
+                        return;
+                      }
+                      nextStrats = selectedStrategies.filter(s => s !== strat.id);
+                    } else {
+                      nextStrats = [...selectedStrategies, strat.id];
+                    }
+                    setSelectedStrategies(nextStrats);
+                    if (nextStrats.includes("SWING_TRADING")) setTimeframe("4h");
+                    triggerAgentScan(nextStrats);
+                  }}
+                  className={`px-3 py-1.5 rounded-md border text-left transition-all flex items-center gap-1.5 ${
+                    isSelected
+                      ? "bg-[#3DDBD9] text-[#0B0C10] font-bold border-[#3DDBD9] shadow-[0_0_10px_rgba(61,219,217,0.3)]"
+                      : "bg-[#0B0E13] text-[#838C9C] border-[#1F2833] hover:border-[#3DDBD9]/50 hover:text-white"
+                  }`}
+                >
+                  <span>{isSelected ? "✓" : "+"}</span>
+                  <span>{strat.name}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </header>
+
+      {/* Swing Trading Detailed Research Playbook Modal */}
+      {showSwingResearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-[#12161D] border-2 border-[#3DDBD9] rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto font-mono text-sm space-y-5 shadow-[0_0_30px_rgba(61,219,217,0.2)]">
+            <div className="flex justify-between items-center border-b border-[#232833] pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>🌊 SWING TRADING RESEARCH & STRATEGY PLAYBOOK</span>
+                </h2>
+                <p className="text-xs text-[#3DDBD9] mt-0.5">Comprehensive Guide & Best Practices for Multi-Day Positions</p>
+              </div>
+              <button
+                onClick={() => setShowSwingResearch(false)}
+                className="text-[#838C9C] hover:text-white font-bold px-2 py-1 bg-[#1F2833] rounded"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs leading-relaxed text-[#E6E9EF]">
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#FFD600] uppercase mb-2">1. What is Swing Trading?</h3>
+                <p>
+                  Swing trading is a speculative style where traders hold positions across <strong>2 days to several weeks</strong> to capture expected price "swings" or momentum moves. Unlike day trading (which closes before market close) or position trading (held for months/years), swing trading targets mid-term price swings on <strong>4-Hour (4H) and Daily (1D) timeframes</strong>.
+                </p>
+              </section>
+
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#3DDBD9] uppercase mb-2">2. Core Types & Ways of Swing Trading</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">A. Trend-Following Swing Trading</strong>
+                    <p className="text-gray-400">Identifies sustained market trends using 20/50/200 EMAs. Traders enter on minor pullbacks in the direction of the dominant daily trend (Higher Highs & Higher Lows).</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">B. Fibonacci & Structural Retest</strong>
+                    <p className="text-gray-400">Measures swing highs/lows using Golden Ratio Fibonacci retracements (50% & 61.8%). Enters at key horizontal support retests with high R:R ratios.</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">C. Breakout Swing Trading</strong>
+                    <p className="text-gray-400">Monitors consolidation ranges, flags, and pennants. Position is initiated when price breaks key resistance with strong institutional volume surge.</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">D. Counter-Trend Reversal Swing</strong>
+                    <p className="text-gray-400">Identifies exhausted trends using RSI momentum divergences and 2.5 StdDev Bollinger extensions at key multi-month daily support levels.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#00E676] uppercase mb-2">3. Best Practices & Risk Management Rules</h3>
+                <ul className="list-disc list-inside space-y-1.5 text-gray-300">
+                  <li><strong>Minimum 1:2.5 Risk-to-Reward Ratio:</strong> Swing trades must target at least 2.5x potential reward relative to initial risk.</li>
+                  <li><strong>Multi-Timeframe Confluence:</strong> Always determine macro trend bias on Daily (1D), then refine entries on 4H/1H candles.</li>
+                  <li><strong>Stop Loss Placement:</strong> Place stops slightly beyond structural swing highs/lows or 2x ATR (Average True Range) to withstand noise.</li>
+                  <li><strong>Position Sizing:</strong> Risk no more than 1-2% of total account capital per swing setup.</li>
+                  <li><strong>Partial Take-Profits:</strong> Scale out 50% profit at TP1 (local structural pivot) and move Stop-Loss to Breakeven.</li>
+                </ul>
+              </section>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setSelectedStrategies(["SWING_TRADING"]);
+                    setTimeframe("4h");
+                    triggerAgentScan(["SWING_TRADING"]);
+                    setShowSwingResearch(false);
+                    toast.success("Applied Swing Trading Strategy & 4H Timeframe!");
+                  }}
+                  className="px-5 py-2.5 bg-[#3DDBD9] text-[#0B0C10] font-bold rounded hover:bg-[#2CBDBA] transition-all"
+                >
+                  ⚡ APPLY SWING TRADING MODEL NOW
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Grid: Responsive Chart + Agent Drawer */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 min-h-0">
