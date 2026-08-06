@@ -4,7 +4,7 @@ import { TRADABLE_PAIRS } from "../App";
 import { formatPrice } from "../utils";
 
 export default function MarketTicker() {
-  const { prices } = useRealtimeData();
+  const { prices } = useRealtimeData('prices');
 
   const getDisplayPrice = (symbol: string) => {
     const val = prices[symbol];

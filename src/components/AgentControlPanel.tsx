@@ -12,7 +12,7 @@ const ALL_STRATEGIES = [
   { id: "GRID_TRADING", name: "Grid Range Harvesting", baseWin: 77.5, color: "#B388FF", desc: "ATR Channel Range Grid" }
 ];
 
-export default function AgentControlPanel() {
+const AgentControlPanel = React.memo(function AgentControlPanel() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeStrategies, setActiveStrategies] = useState<string[]>(["TREND_FOLLOWING", "MEAN_REVERSION"]);
@@ -25,7 +25,7 @@ export default function AgentControlPanel() {
     GRID_TRADING: 50
   });
   const [compositeAnalytics, setCompositeAnalytics] = useState<any>(null);
-  const { prices } = useRealtimeData();
+  const { prices } = useRealtimeData('prices');
 
   // Agent Status Engine State
   const [agentStatus, setAgentStatus] = useState<any>({
@@ -556,5 +556,7 @@ export default function AgentControlPanel() {
       </div>
     </div>
   );
-}
+});
+
+export default AgentControlPanel;
 

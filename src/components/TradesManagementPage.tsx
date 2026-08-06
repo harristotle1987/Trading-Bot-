@@ -35,7 +35,7 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
   const [filterMode, setFilterMode] = useState<"ALL" | "DEMO" | "LIVE">("ALL");
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const { positions: globalPositions } = useRealtimeData();
+  const { positions: globalPositions } = useRealtimeData('positions');
 
   useEffect(() => {
       setPositions(globalPositions.filter(p => p.status === 'OPEN'));
@@ -70,9 +70,9 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
     }
   };
 
-  const filteredPositions = positions.filter(
+  const filteredPositions = React.useMemo(() => positions.filter(
     (p) => filterMode === "ALL" || p.account_mode === filterMode
-  );
+  ), [positions, filterMode]);
 
   const totalPnL = filteredPositions.reduce((acc, p) => acc + p.unrealized_pnl, 0);
 

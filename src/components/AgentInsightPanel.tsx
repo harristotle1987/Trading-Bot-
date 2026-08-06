@@ -15,13 +15,13 @@ interface TradeSignal {
   tpPrice: number;
 }
 
-export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: string }) {
+const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: string }) {
   const [signals, setSignals] = useState<TradeSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [autoScanEnabled, setAutoScanEnabled] = useState(false);
   const [executingSymbol, setExecutingSymbol] = useState<string | null>(null);
-  const { prices } = useRealtimeData();
+  const { prices } = useRealtimeData('prices');
   const isInitialLoad = useRef(true);
   
   // Custom input states
@@ -225,14 +225,14 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
               const pairInfo = TRADABLE_PAIRS.find(p => p.symbol === s.symbol);
               const category = pairInfo?.category === 'forex' ? 'forex' : 'crypto';
               
-              const calc = calculatePositionTrajectory(
+              const calc = useMemo(() => calculatePositionTrajectory(
                 allocation,
                 leverage,
                 s.entryPrice,
                 s.slPrice || s.entryPrice * 0.99,
                 s.tpPrice || s.entryPrice * 1.02,
                 category
-              );
+              ), [allocation, leverage, s.entryPrice, s.slPrice, s.tpPrice, category]);
 
               const livePrice = prices[s.symbol] || s.entryPrice;
 
@@ -292,5 +292,7 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
       )}
     </div>
   );
-}
+});
+
+export default AgentInsightPanel;
 

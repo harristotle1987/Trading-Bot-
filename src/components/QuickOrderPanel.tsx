@@ -18,7 +18,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMo
     const [aiAnalysis, setAiAnalysis] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [pendingTrade, setPendingTrade] = useState<any>(null);
-    const { prices } = useRealtimeData();
+    const { prices } = useRealtimeData('prices');
 
     // Trigger AI Scan when panel opens or strategies change
     useEffect(() => {

@@ -3,7 +3,7 @@ import { useRealtimeData } from "../hooks/useRealtimeData";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function AnalyticsDashboard() {
-  const { positions } = useRealtimeData();
+  const { positions } = useRealtimeData('positions');
   const activeTrades = positions.filter(p => p.status === 'OPEN');
   const closedTrades = positions.filter(p => p.status === 'CLOSED');
   const loading = false;

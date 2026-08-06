@@ -19,7 +19,7 @@ interface ClosedPosition {
 }
 
 export default function ClosedTrades() {
-  const { positions } = useRealtimeData();
+  const { positions } = useRealtimeData('positions');
   const trades = positions.filter(p => p.status === 'CLOSED') as ClosedPosition[];
   const [isOpen, setIsOpen] = useState(false);
 

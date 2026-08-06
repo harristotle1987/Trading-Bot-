@@ -18,7 +18,7 @@ let listeners: Function[] = [];
 let isSubscribed = false;
 
 const notifyListeners = () => {
-    listeners.forEach(listener => listener({ prices: { ...globalPrices }, positions: [...globalPositions] }));
+    listeners.forEach(listener => listener({ prices: globalPrices, positions: globalPositions }));
 };
 
 // Helper to fetch market prices from API
@@ -28,8 +28,11 @@ const fetchPrices = async () => {
         if (res.ok) {
             const data = await res.json();
             if (data && typeof data === 'object' && Object.keys(data).length > 0) {
-                globalPrices = { ...globalPrices, ...data };
-                notifyListeners();
+                const changed = JSON.stringify(globalPrices) !== JSON.stringify({ ...globalPrices, ...data });
+                if (changed) {
+                    globalPrices = { ...globalPrices, ...data };
+                    notifyListeners();
+                }
             }
         }
     } catch (e) {
@@ -65,23 +68,55 @@ if (pusherInstance && !isSubscribed) {
     const channel = pusherInstance.subscribe('trading-bot');
     channel.bind('market-update', function(pusherData: any) {
         if (pusherData.prices) {
-            globalPrices = { ...globalPrices, ...pusherData.prices };
-            notifyListeners();
+            const changed = JSON.stringify(globalPrices) !== JSON.stringify({ ...globalPrices, ...pusherData.prices });
+            if (changed) {
+                globalPrices = { ...globalPrices, ...pusherData.prices };
+                notifyListeners();
+            }
         }
     });
     channel.bind('positions-update', function(pusherData: any) {
         if (pusherData.positions) {
-            globalPositions = pusherData.positions;
-            notifyListeners();
+            const changed = JSON.stringify(globalPositions) !== JSON.stringify(pusherData.positions);
+            if (changed) {
+                globalPositions = pusherData.positions;
+                notifyListeners();
+            }
         }
     });
 }
 
-export function useRealtimeData() {
-    const [data, setData] = useState({ prices: globalPrices, positions: globalPositions });
+export function useRealtimeData(selector: 'prices' | 'positions' | 'both' = 'both') {
+    const [data, setData] = useState(() => {
+        return { 
+            prices: selector === 'positions' ? {} : globalPrices, 
+            positions: selector === 'prices' ? [] : globalPositions 
+        };
+    });
 
     useEffect(() => {
-        const listener = (newData: any) => setData(newData);
+        let lastPrices = globalPrices;
+        let lastPositions = globalPositions;
+
+        const listener = (newData: any) => {
+            let shouldUpdate = false;
+            
+            if (selector !== 'positions' && lastPrices !== newData.prices) {
+                shouldUpdate = true;
+            }
+            if (selector !== 'prices' && lastPositions !== newData.positions) {
+                shouldUpdate = true;
+            }
+            
+            if (shouldUpdate) {
+                lastPrices = newData.prices;
+                lastPositions = newData.positions;
+                setData({ 
+                    prices: selector === 'positions' ? {} : lastPrices, 
+                    positions: selector === 'prices' ? [] : lastPositions 
+                });
+            }
+        };
         listeners.push(listener);
 
         // Fetch on mount
@@ -109,7 +144,7 @@ export function useRealtimeData() {
             window.removeEventListener('balance_updated', handleTradeUpdate);
             clearInterval(pollInterval);
         };
-    }, []);
+    }, [selector]);
 
     return data;
 }
