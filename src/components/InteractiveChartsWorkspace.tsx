@@ -214,7 +214,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Demo Order
   const executeDemoTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const qty = parseFloat((amount / pair.suggested_entry).toFixed(4));
+      const livePrice = prices[pair.symbol] || pair.suggested_entry || 100;
+      const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/demo/place-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -224,7 +225,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           side: pair.directional_bias.includes("BUY") ? "BUY" : "SELL",
           qty: qty,
           amount: amount,
-          price: pair.suggested_entry,
+          price: livePrice,
+          use_market_price: true,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
         }),
@@ -232,6 +234,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const data = await res.json();
       if (res.ok) {
         toast.success(`[DEMO MODE] ${data.message || 'Trade executed successfully'}`);
+        window.dispatchEvent(new CustomEvent("trade_updated"));
+        window.dispatchEvent(new Event("balance_updated"));
         fetchBalances();
       } else {
         toast.error(`[DEMO MODE] Error: ${data.error || 'Failed to place order'}`);
@@ -245,7 +249,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Live Order
   const executeLiveTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const qty = parseFloat((amount / pair.suggested_entry).toFixed(4));
+      const livePrice = prices[pair.symbol] || pair.suggested_entry || 100;
+      const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/live/place-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -255,7 +260,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
           side: pair.directional_bias.includes("BUY") ? "BUY" : "SELL",
           qty: qty,
           amount: amount,
-          price: pair.suggested_entry,
+          price: livePrice,
+          use_market_price: true,
           stop_loss: pair.suggested_sl,
           take_profit: pair.suggested_tp,
         }),
@@ -263,6 +269,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
       const data = await res.json();
       if (res.ok) {
         toast.success(`[LIVE MODE] ${data.message || 'Trade executed successfully'}`);
+        window.dispatchEvent(new CustomEvent("trade_updated"));
+        window.dispatchEvent(new Event("balance_updated"));
         fetchBalances();
       } else {
         toast.error(`[LIVE MODE] Error: ${data.error || 'Failed to place order'}`);

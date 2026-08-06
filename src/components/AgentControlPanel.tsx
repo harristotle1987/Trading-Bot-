@@ -182,6 +182,7 @@ export default function AgentControlPanel() {
             side: isBuy ? "BUY" : "SELL",
             capital: signal.amount || 100,
             execution_price: currentPrice,
+            use_market_price: true,
             tp: formattedTp,
             sl: formattedSl,
             account_mode: "DEMO"
@@ -191,7 +192,9 @@ export default function AgentControlPanel() {
           const errData = await res.json();
           throw new Error(errData.error || "Failed to execute");
       }
-      toast.success(`Trade Executed for ${signal.symbol}! [TP: $${formattedTp} | SL: $${formattedSl}]`);
+      toast.success(`Trade Executed for ${signal.symbol} at market price! [TP: $${formattedTp} | SL: $${formattedSl}]`);
+      window.dispatchEvent(new CustomEvent("trade_updated"));
+      window.dispatchEvent(new Event("balance_updated"));
       setSignals(prev => prev.filter(s => s.id !== signal.id));
     } catch (err: any) {
       toast.error(`Execution failed: ${err.message}`);

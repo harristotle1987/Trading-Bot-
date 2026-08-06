@@ -1,5 +1,6 @@
 
 import { pusherServer as pusher } from './src/lib/pusher.js';
+import { calculateMarketPnL } from './src/utils/tradeMath.js';
 
 
 import express from "express";
@@ -8,7 +9,7 @@ import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
-import { adminDb as db } from "./src/lib/firebase";
+import { adminDb as db, initFirebaseAdmin } from "./src/lib/firebase";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
@@ -21,6 +22,7 @@ app.use('/api/', (req, res, next) => {
     next();
 });
 async function startServer() {
+  await initFirebaseAdmin();
   const PORT = 3000;
 
   // API Routes
@@ -1153,19 +1155,30 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
   });
 
   async function getCurrentMarketPrice(symbol: string): Promise<number | null> {
+    if (GLOBAL_PRICES[symbol] && GLOBAL_PRICES[symbol] > 0) {
+        return GLOBAL_PRICES[symbol];
+    }
     try {
         const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`);
         if (binanceRes.ok) {
             const data = await binanceRes.json();
-            return parseFloat(data.price);
+            const p = parseFloat(data.price);
+            if (p > 0) {
+                GLOBAL_PRICES[symbol] = p;
+                return p;
+            }
         }
-// Fallback to Finnhub
+        // Fallback to Finnhub
         if (process.env.FINNHUB_API_KEY) {
             const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=BINANCE:${symbol}&token=${process.env.FINNHUB_API_KEY}`);
             if (finnhubRes.ok) {
                 const data = await finnhubRes.json();
                 if (data && data.c) {
-                    return parseFloat(data.c);
+                    const p = parseFloat(data.c);
+                    if (p > 0) {
+                        GLOBAL_PRICES[symbol] = p;
+                        return p;
+                    }
                 }
             }
         }
@@ -1197,13 +1210,18 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         if (tp) tp = parseFloat((tp * diffRatio).toFixed(4));
     }
 
+    const tradeLeverage = order.leverage || 10;
+    const quantity = order.qty || ((amount * tradeLeverage) / entry);
+
     const position = {
         id: `demo_pos_${nextPosId++}`,
         account_mode: "DEMO",
         broker: "CTRADER",
         symbol: order.symbol,
         side: order.side,
-        quantity: order.qty,
+        capital: amount,
+        leverage: tradeLeverage,
+        quantity: parseFloat(quantity.toFixed(4)),
         entry_price: entry,
         current_mark_price: entry,
         stop_loss: sl,
@@ -1213,7 +1231,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         status: "OPEN",
         opened_at: new Date().toISOString()
     };
-    GLOBAL_POSITIONS.push(position); saveTrades();
+    GLOBAL_POSITIONS.push(position); 
+    saveTrades();
+    if (pusher) { try { pusher.trigger("trading-bot", "positions-update", { positions: GLOBAL_POSITIONS }); } catch(e){} }
 
     // Also push to the global execution mock arrays
     const executionSide = order.side === 'BUY' ? 'LONG' : 'SHORT';
@@ -1266,13 +1286,18 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         if (tp) tp = parseFloat((tp * diffRatio).toFixed(4));
     }
 
+    const tradeLeverage = order.leverage || 10;
+    const quantity = order.qty || ((amount * tradeLeverage) / entry);
+
     const position = {
         id: `live_pos_${nextPosId++}`,
         account_mode: "LIVE",
         broker: "BINANCE",
         symbol: order.symbol,
         side: order.side,
-        quantity: order.qty,
+        capital: amount,
+        leverage: tradeLeverage,
+        quantity: parseFloat(quantity.toFixed(4)),
         entry_price: entry,
         current_mark_price: entry,
         stop_loss: sl,
@@ -1282,7 +1307,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         status: "OPEN",
         opened_at: new Date().toISOString()
     };
-    GLOBAL_POSITIONS.push(position); saveTrades();
+    GLOBAL_POSITIONS.push(position); 
+    saveTrades();
+    if (pusher) { try { pusher.trigger("trading-bot", "positions-update", { positions: GLOBAL_POSITIONS }); } catch(e){} }
 
     // Also push to the global execution mock arrays
     const executionSide = order.side === 'BUY' ? 'LONG' : 'SHORT';
@@ -1356,41 +1383,75 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
 
   app.post("/api/trades/execute", express.json(), async (req, res) => {
-    const { symbol, side, capital, execution_price, account_mode, tp, sl } = req.body;
-    if (account_mode === "DEMO") {
-        if (demoBalance < capital) {
-            return res.status(400).json({ error: "Insufficient balance" });
+    const { symbol, side, capital = 100, leverage = 10, execution_price, account_mode, tp, sl, use_market_price } = req.body;
+    
+    const tradeCapital = parseFloat(capital) || 100;
+    const tradeLeverage = parseFloat(leverage) || 10;
+    
+    // Always validate or fetch live current market price to prevent hallucinated entries
+    let liveMarketPrice = GLOBAL_PRICES[symbol] || await getCurrentMarketPrice(symbol);
+    let price = parseFloat(execution_price);
+
+    if (use_market_price || !price || isNaN(price) || price <= 0 || (liveMarketPrice && liveMarketPrice > 0 && Math.abs(price - liveMarketPrice) / liveMarketPrice > 0.12)) {
+        if (liveMarketPrice && liveMarketPrice > 0) {
+            price = liveMarketPrice;
         }
-        demoBalance -= capital;
+    }
+    if (!price || isNaN(price) || price <= 0) {
+        price = 100; // Final safe numeric fallback
+    }
+
+    if (account_mode === "DEMO") {
+        if (demoBalance < tradeCapital) {
+            return res.status(400).json({ error: "Insufficient demo balance" });
+        }
+        demoBalance -= tradeCapital;
         if (db) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(console.error);
     } else if (account_mode === "LIVE") {
-        if (liveBalance < capital) {
+        if (liveBalance < tradeCapital) {
             return res.status(400).json({ error: "Insufficient live balance" });
         }
-        liveBalance -= capital;
+        liveBalance -= tradeCapital;
         if (db) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(console.error);
     } else {
         return res.status(400).json({ error: "Invalid account mode" });
     }
     
+    // Calculate precise traded units based on capital and leverage
+    const notionalValue = tradeCapital * tradeLeverage;
+    const calculatedQty = notionalValue / price;
+
     const position = {
         id: (account_mode === "LIVE" ? "live_pos_" : "demo_pos_") + nextPosId++,
         account_mode,
         broker: "BUNKER",
         symbol,
         side,
-        quantity: capital / execution_price,
-        entry_price: execution_price,
-        current_mark_price: execution_price,
-        take_profit: tp,
-        stop_loss: sl,
+        capital: tradeCapital,
+        leverage: tradeLeverage,
+        quantity: parseFloat(calculatedQty.toFixed(4)),
+        entry_price: price,
+        current_mark_price: price,
+        take_profit: tp ? parseFloat(tp) : 0,
+        stop_loss: sl ? parseFloat(sl) : 0,
         unrealized_pnl: 0,
+        pnl_pct: 0,
+        pips: 0,
         realized_pnl: 0,
         status: "OPEN",
         opened_at: new Date().toISOString()
     };
     GLOBAL_POSITIONS.push(position);
     saveTrades();
+
+    if (pusher) {
+        try {
+            pusher.trigger("trading-bot", "positions-update", { positions: GLOBAL_POSITIONS });
+        } catch(e) {
+            console.error("Pusher position trigger error:", e);
+        }
+    }
+
     res.json({ message: "Trade executed successfully", position });
   });
 
@@ -1398,30 +1459,35 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     console.log("--- Closing position request ---");
     const { position_id, account_mode, exit_price } = req.body;
     
-    const pos = GLOBAL_POSITIONS.find(p => p.id === position_id && p.account_mode === account_mode);
+    const pos = GLOBAL_POSITIONS.find(p => p.id === position_id && (account_mode === "ALL" || !account_mode || p.account_mode === account_mode));
     
     if (pos) {
-        // Calculate realized PnL
-        const quantity = pos.quantity;
-        const entry_price = pos.entry_price;
-        let realized_pnl = 0;
+        const closePrice = exit_price && exit_price > 0 ? parseFloat(exit_price) : (pos.current_mark_price || pos.entry_price);
         
-        if (pos.side.toUpperCase() === "BUY") {
-            realized_pnl = (exit_price - entry_price) * quantity;
-        } else {
-            realized_pnl = (entry_price - exit_price) * quantity;
-        }
-        realized_pnl = parseFloat(realized_pnl.toFixed(2));
+        // Calculate realized PnL using accurate pip/market formula
+        const pnlRes = calculateMarketPnL({
+            symbol: pos.symbol,
+            side: pos.side,
+            entryPrice: pos.entry_price,
+            currentPrice: closePrice,
+            quantity: pos.quantity,
+            capital: pos.capital,
+            leverage: pos.leverage || 10
+        });
 
+        const realized_pnl = pnlRes.pnl;
         pos.status = "CLOSED";
         pos.closed_at = new Date().toISOString();
         pos.realized_pnl = realized_pnl;
+        pos.pnl_pct = pnlRes.pnlPct;
+        pos.pips = pnlRes.pipsMoved;
+        pos.current_mark_price = closePrice;
         saveTrades();
 
-        const principal = quantity * entry_price;
-        const totalReturn = principal + realized_pnl;
+        // Return allocated margin + realized PnL to balance
+        const margin = pos.capital || (pos.quantity * pos.entry_price / (pos.leverage || 10));
+        const totalReturn = margin + realized_pnl;
 
-        // Account balance update
         if (pos.account_mode === "DEMO") {
             demoBalance += totalReturn;
             if (db) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(console.error);
@@ -1431,11 +1497,13 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
             console.log("LIVE trade closed, updated simulated liveBalance to:", liveBalance);
         }
         
-        console.log("Position closed:", pos.id, "Realized PnL:", realized_pnl, "Principal:", principal, "Total Return:", totalReturn);
+        console.log("Position closed:", pos.id, "Realized PnL:", realized_pnl, "Margin:", margin, "Total Return:", totalReturn);
         res.json({
             status: "SUCCESS",
             message: `Position ${position_id} closed successfully.`,
-            realized_pnl: realized_pnl
+            realized_pnl: realized_pnl,
+            pnl_pct: pnlRes.pnlPct,
+            pips: pnlRes.pipsMoved
         });
     } else {
         console.log("Position NOT FOUND:", position_id, account_mode);
@@ -1867,17 +1935,29 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                   if (currentPrice) {
                       pos.current_mark_price = currentPrice;
                       
-                      const pnl = pos.side === 'BUY' 
-                          ? (currentPrice - pos.entry_price) * pos.quantity 
-                          : (pos.entry_price - currentPrice) * pos.quantity;
-                      pos.unrealized_pnl = +(pnl).toFixed(2);
+                      const pnlRes = calculateMarketPnL({
+                          symbol: pos.symbol,
+                          side: pos.side,
+                          entryPrice: pos.entry_price,
+                          currentPrice: currentPrice,
+                          quantity: pos.quantity,
+                          capital: pos.capital,
+                          leverage: pos.leverage || 10
+                      });
+
+                      pos.unrealized_pnl = pnlRes.pnl;
+                      pos.pnl_pct = pnlRes.pnlPct;
+                      pos.pips = pnlRes.pipsMoved;
+                      pos.pip_value = pnlRes.pipValue;
 
                       let shouldClose = false;
                       let closeReason = "";
 
+                      const isBuy = pos.side.toUpperCase() === "BUY" || pos.side.toUpperCase() === "LONG";
+
                       // Check TP
                       if (pos.take_profit) {
-                          const hitTp = pos.side === "BUY" ? currentPrice >= pos.take_profit : currentPrice <= pos.take_profit;
+                          const hitTp = isBuy ? currentPrice >= pos.take_profit : currentPrice <= pos.take_profit;
                           if (hitTp) {
                               shouldClose = true;
                               closeReason = "TP";
@@ -1886,7 +1966,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
                       // Check SL
                       if (pos.stop_loss && !shouldClose) {
-                          const hitSl = pos.side === "BUY" ? currentPrice <= pos.stop_loss : currentPrice >= pos.stop_loss;
+                          const hitSl = isBuy ? currentPrice <= pos.stop_loss : currentPrice >= pos.stop_loss;
                           if (hitSl) {
                               shouldClose = true;
                               closeReason = "SL";
@@ -1895,21 +1975,26 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
                       // Check AutoTrade Profit Threshold (only if auto trade active and pos is LIVE)
                       if (!shouldClose && riskSettings.autoTrade.active && pos.account_mode === "LIVE") {
-                           if (pnl >= riskSettings.autoTrade.min_profit_threshold) {
+                           if (pnlRes.pnl >= riskSettings.autoTrade.min_profit_threshold) {
                                shouldClose = true;
                                closeReason = "AutoTrade Profit Threshold";
                            }
                       }
 
                       if (shouldClose) {
-                          console.log(`System: Closing position ${pos.id} for ${pos.symbol} due to ${closeReason}. PnL: ${pnl}`);
+                          console.log(`System: Closing position ${pos.id} for ${pos.symbol} due to ${closeReason}. Realized PnL: $${pnlRes.pnl}`);
                           pos.status = "CLOSED";
                           pos.closed_at = new Date().toISOString();
-                          pos.realized_pnl = parseFloat(pnl.toFixed(2));
+                          pos.realized_pnl = pnlRes.pnl;
+                          pos.pnl_pct = pnlRes.pnlPct;
+
+                          const margin = pos.capital || (pos.quantity * pos.entry_price / (pos.leverage || 10));
+                          const totalReturn = margin + pnlRes.pnl;
+
                           if (pos.account_mode === "LIVE") {
-                              liveBalance += pos.realized_pnl;
+                              liveBalance += totalReturn;
                           } else {
-                              demoBalance += pos.realized_pnl;
+                              demoBalance += totalReturn;
                           }
                           
                           if (db) {

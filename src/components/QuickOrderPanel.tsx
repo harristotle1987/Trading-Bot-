@@ -113,17 +113,18 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMo
     const isForex = selectedSymbol.includes("USD") && !selectedSymbol.includes("USDT");
 
     const prepareTrade = (side: "BUY" | "SELL") => {
-        const price = currentPrice || 100;
-        const tp = aiAnalysis?.suggested_tp || (side === "BUY" ? price * 1.025 : price * 0.975);
-        const sl = aiAnalysis?.suggested_sl || (side === "BUY" ? price * 0.988 : price * 1.012);
+        const livePrice = prices[selectedSymbol] || currentPrice || 100;
+        const tp = aiAnalysis?.suggested_tp || (side === "BUY" ? livePrice * 1.025 : livePrice * 0.975);
+        const sl = aiAnalysis?.suggested_sl || (side === "BUY" ? livePrice * 0.988 : livePrice * 1.012);
         
         setPendingTrade({
             symbol: selectedSymbol,
             side,
-            price: parseFloat(price.toFixed(isForex ? 4 : 2)),
+            price: parseFloat(livePrice.toFixed(isForex ? 4 : 2)),
             tp: parseFloat(tp.toFixed(isForex ? 4 : 2)),
             sl: parseFloat(sl.toFixed(isForex ? 4 : 2)),
-            capital
+            capital,
+            use_market_price: true
         });
     };
 
@@ -139,6 +140,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMo
                     side,
                     capital,
                     execution_price: price,
+                    use_market_price: true,
                     tp,
                     sl,
                     account_mode: accountMode
@@ -147,8 +149,11 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMo
 
             const data = await executeRes.json();
             if (executeRes.ok) {
-                toast.success(`${side} order executed for ${symbol} at $${price}`);
+                const executedPrice = data.position?.entry_price || price;
+                toast.success(`${side} order executed for ${symbol} at $${executedPrice}`);
                 playSuccessSound();
+                window.dispatchEvent(new CustomEvent("trade_updated"));
+                window.dispatchEvent(new Event("balance_updated"));
                 setPendingTrade(null);
                 setIsOpen(false);
             } else {

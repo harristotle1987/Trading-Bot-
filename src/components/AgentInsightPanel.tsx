@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { calculatePositionTrajectory } from '../utils/tradeMath';
 import { TRADABLE_PAIRS } from '../App';
+import { useRealtimeData } from '../hooks/useRealtimeData';
+import { toast } from 'sonner';
 
 interface TradeSignal {
   symbol: string;
@@ -16,6 +18,8 @@ interface TradeSignal {
 export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: string }) {
   const [signals, setSignals] = useState<TradeSignal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [executingSymbol, setExecutingSymbol] = useState<string | null>(null);
+  const { prices } = useRealtimeData();
   
   // Custom input states
   const [allocation, setAllocation] = useState<number>(10);
@@ -24,6 +28,40 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
   // Finnhub sentiment
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [sentimentLoading, setSentimentLoading] = useState(true);
+
+  const handleExecuteSignal = async (s: TradeSignal) => {
+    setExecutingSymbol(s.symbol);
+    try {
+      const livePrice = prices[s.symbol] || s.entryPrice || 100;
+      const res = await fetch("/api/trades/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: s.symbol,
+          side: s.type === "UP" ? "BUY" : "SELL",
+          capital: allocation,
+          leverage: leverage,
+          execution_price: livePrice,
+          use_market_price: true,
+          tp: s.tpPrice,
+          sl: s.slPrice,
+          account_mode: "DEMO"
+        })
+      });
+      if (res.ok) {
+        toast.success(`Trade Executed for ${s.symbol} at live market price ($${livePrice})!`);
+        window.dispatchEvent(new CustomEvent("trade_updated"));
+        window.dispatchEvent(new Event("balance_updated"));
+      } else {
+        const data = await res.json();
+        toast.error(`Trade failed: ${data.error || data.message}`);
+      }
+    } catch(err: any) {
+      toast.error(`Execution error: ${err.message}`);
+    } finally {
+      setExecutingSymbol(null);
+    }
+  };
 
   useEffect(() => {
     const fetchSignals = async () => {
@@ -148,39 +186,53 @@ export default function AgentInsightPanel({ selectedSymbol }: { selectedSymbol: 
                 category
               );
 
+              const livePrice = prices[s.symbol] || s.entryPrice;
+
               return (
-                <div key={s.symbol} className="border border-[#1F2833] rounded p-3 bg-[#12161D] text-xs hover:border-[#3DDBD9] transition-colors">
-                    <div className="flex justify-between items-center mb-2 border-b border-[#232833] pb-2">
-                        <div className="text-white font-bold text-sm font-mono">{s.symbol} <span className="text-[#838C9C] text-[10px]">({category})</span></div>
-                        <div className={`font-bold font-mono ${s.type === 'UP' ? 'text-[#00E676]' : 'text-[#FF1744]'}`}>{s.type}</div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-2 text-[#838C9C] font-mono mb-2 border-b border-[#232833] pb-2">
-                        <div>Entry: <span className="text-white">${s.entryPrice}</span></div>
-                        <div>Win Rate: <span className="text-white">{s.winRate}</span></div>
-                        <div>SL: <span className="text-white">${s.slPrice}</span></div>
-                        <div>TP: <span className="text-white">${s.tpPrice}</span></div>
+                <div key={s.symbol} className="border border-[#1F2833] rounded p-3 bg-[#12161D] text-xs hover:border-[#3DDBD9] transition-colors flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-center mb-2 border-b border-[#232833] pb-2">
+                          <div className="text-white font-bold text-sm font-mono flex items-center gap-1.5">
+                            {s.symbol} <span className="text-[#838C9C] text-[10px]">({category})</span>
+                          </div>
+                          <div className={`font-bold font-mono px-2 py-0.5 rounded text-[11px] ${s.type === 'UP' ? 'bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/30' : 'bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30'}`}>{s.type === 'UP' ? 'BUY' : 'SELL'}</div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 text-[#838C9C] font-mono mb-2 border-b border-[#232833] pb-2">
+                          <div>Live Price: <span className="text-[#3DDBD9] font-bold">${livePrice}</span></div>
+                          <div>Win Rate: <span className="text-white">{s.winRate}</span></div>
+                          <div>SL: <span className="text-[#FF1744]">${s.slPrice}</span></div>
+                          <div>TP: <span className="text-[#00E676]">${s.tpPrice}</span></div>
+                      </div>
+
+                      <div className="space-y-1 mb-3">
+                          <div className="text-[10px] text-white uppercase tracking-wider mb-1">Trajectory Risk Profile</div>
+                          <div className="flex justify-between text-[#838C9C]">
+                              <span>Contract Size:</span>
+                              <span className="text-white">{calc.contractSizeStr} {category === 'crypto' && s.symbol.replace('USDT', '')}</span>
+                          </div>
+                          <div className="flex justify-between text-[#838C9C]">
+                              <span>Pip/Point Value:</span>
+                              <span className="text-[#00E676]">${calc.pipValue.toFixed(4)} / {category === 'forex' ? 'pip' : '$1'}</span>
+                          </div>
+                          <div className="flex justify-between text-[#838C9C]">
+                              <span>Max Risk (SL):</span>
+                              <span className="text-[#FF1744]">-${calc.maxRiskAtSL.toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-[#838C9C]">
+                              <span>Max Gain (TP):</span>
+                              <span className="text-[#00E676]">+$${calc.maxGainAtTP.toFixed(2)}</span>
+                          </div>
+                      </div>
                     </div>
 
-                    <div className="space-y-1">
-                        <div className="text-[10px] text-white uppercase tracking-wider mb-1">Trajectory Risk Profile</div>
-                        <div className="flex justify-between text-[#838C9C]">
-                            <span>Contract Size:</span>
-                            <span className="text-white">{calc.contractSizeStr} {category === 'crypto' && s.symbol.replace('USDT', '')}</span>
-                        </div>
-                        <div className="flex justify-between text-[#838C9C]">
-                            <span>Pip/Point Value:</span>
-                            <span className="text-[#00E676]">${calc.pipValue.toFixed(4)} / {category === 'forex' ? 'pip' : '$1'}</span>
-                        </div>
-                        <div className="flex justify-between text-[#838C9C]">
-                            <span>Max Risk (SL):</span>
-                            <span className="text-[#FF1744]">-${calc.maxRiskAtSL.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-[#838C9C]">
-                            <span>Max Gain (TP):</span>
-                            <span className="text-[#00E676]">+$${calc.maxGainAtTP.toFixed(2)}</span>
-                        </div>
-                    </div>
+                    <button
+                      onClick={() => handleExecuteSignal(s)}
+                      disabled={executingSymbol === s.symbol}
+                      className="w-full py-2 px-3 rounded font-bold font-mono text-xs transition-all flex items-center justify-center gap-1.5 bg-[#3DDBD9] hover:bg-[#32b8b6] text-black disabled:opacity-50"
+                    >
+                      {executingSymbol === s.symbol ? "Executing..." : `⚡ Execute @ Market ($${livePrice})`}
+                    </button>
                 </div>
               );
             })}

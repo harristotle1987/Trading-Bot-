@@ -15,12 +15,16 @@ interface Position {
   broker: string;
   symbol: string;
   side: "BUY" | "SELL";
+  capital?: number;
+  leverage?: number;
   quantity: number;
   entry_price: number;
   current_mark_price: number;
   stop_loss: number;
   take_profit: number;
   unrealized_pnl: number;
+  pnl_pct?: number;
+  pips?: number;
   ai_confidence_score: number;
   status: string;
   opened_at: string;
@@ -54,7 +58,8 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
       const data = await res.json();
       console.log("Close response data:", data);
       if (res.ok) {
-          toast.success(`[${mode}] Trade Closed! Realized PnL: ${data.realized_pnl}`);
+          toast.success(`[${mode}] Trade Closed! Realized PnL: $${parseFloat(data.realized_pnl || 0).toFixed(2)}`);
+          window.dispatchEvent(new CustomEvent("trade_updated"));
           window.dispatchEvent(new Event("balance_updated"));
       } else {
           toast.error(`Failed to close position: ${data.message || data.error}`);
@@ -137,64 +142,92 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                   <th className="p-4">Mode</th>
                   <th className="p-4">Symbol</th>
                   <th className="p-4">Side</th>
-                  <th className="p-4">Qty</th>
-                  <th className="p-4">Amount</th>
+                  <th className="p-4">Qty / Lev</th>
+                  <th className="p-4">Margin / Size</th>
                   <th className="p-4">Entry</th>
                   <th className="p-4">Mark Price</th>
+                  <th className="p-4">Pips</th>
                   <th className="p-4">SL / TP</th>
-                  <th className="p-4">NVIDIA AI Score</th>
+                  <th className="p-4">AI Score</th>
                   <th className="p-4">Unrealized PnL</th>
                   <th className="p-4 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y-2 divide-[#1F2833]">
-                {filteredPositions.map((p) => (
-                  <tr 
-                    key={p.id} 
-                    className="hover:bg-[#1A1A22] transition-colors group cursor-pointer"
-                    onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
-                  >
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${
-                          p.account_mode === "DEMO"
-                            ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30"
-                            : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"
-                        }`}
-                      >
-                        {p.account_mode}
-                      </span>
-                    </td>
-                    <td className="p-4 font-bold text-white text-sm">{p.symbol}</td>
-                    <td className="p-4">
-                      <span className={p.side === "BUY" ? "text-[#00E676] font-bold" : "text-[#FF1744] font-bold"}>
-                        {p.side}
-                      </span>
-                    </td>
-                    <td className="p-4 text-[#E6E9EF] font-bold">{p.quantity}</td>
-                    <td className="p-4 text-[#838C9C] font-mono">${(p.quantity * p.entry_price).toFixed(2)}</td>
-                    <td className="p-4 text-[#838C9C]">${formatPrice(p.entry_price)}</td>
-                    <td className="p-4 text-white font-bold bg-[#0B0C10]/50">${formatPrice(p.current_mark_price)}</td>
-                    <td className="p-4 text-[#838C9C]">
-                      <span className="text-[#FF1744]/80 font-bold">${formatPrice(p.stop_loss || 0)}</span> / <span className="text-[#00E676]/80 font-bold">${formatPrice(p.take_profit || 0)}</span>
-                    </td>
-                    <td className="p-4 text-[#FFD600] font-bold">{p.ai_confidence_score || 'N/A'}%</td>
-                    <td className={`p-4 font-bold text-sm bg-[#0B0C10]/50 ${p.unrealized_pnl >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}`}>
-                      {p.unrealized_pnl >= 0 ? `+$${p.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(p.unrealized_pnl).toFixed(2)}`}
-                    </td>
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            handleClosePosition(p.id, p.account_mode);
-                        }}
-                        className="px-4 py-2 bg-[#1F2833] hover:bg-[#FF1744] text-white font-bold rounded text-[11px] transition-colors border border-[#1F2833] hover:border-[#FF1744] group-hover:shadow-[0_0_10px_rgba(255,23,68,0.2)] uppercase tracking-wider"
-                      >
-                        CLOSE MARKET
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredPositions.map((p) => {
+                  const isGain = p.unrealized_pnl >= 0;
+                  const pnlClass = isGain ? "text-[#00E676]" : "text-[#FF1744]";
+                  const marginVal = p.capital || ((p.quantity * p.entry_price) / (p.leverage || 10));
+                  const notionalVal = p.quantity * p.entry_price;
+
+                  return (
+                    <tr 
+                      key={p.id} 
+                      className="hover:bg-[#1A1A22] transition-colors group cursor-pointer"
+                      onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
+                    >
+                      <td className="p-4">
+                        <span
+                          className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${
+                            p.account_mode === "DEMO"
+                              ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30"
+                              : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"
+                          }`}
+                        >
+                          {p.account_mode}
+                        </span>
+                      </td>
+                      <td className="p-4 font-bold text-white text-sm">{p.symbol}</td>
+                      <td className="p-4">
+                        <span className={p.side === "BUY" || p.side === "LONG" ? "text-[#00E676] font-bold" : "text-[#FF1744] font-bold"}>
+                          {p.side}
+                        </span>
+                      </td>
+                      <td className="p-4 text-[#E6E9EF] font-bold">
+                        <div>{p.quantity} units</div>
+                        <div className="text-[10px] text-[#3DDBD9] font-mono">{p.leverage || 10}x Lev</div>
+                      </td>
+                      <td className="p-4 text-[#838C9C] font-mono">
+                        <div className="text-white font-bold">${marginVal.toFixed(2)}</div>
+                        <div className="text-[10px] text-[#838C9C]">${notionalVal.toFixed(2)}</div>
+                      </td>
+                      <td className="p-4 text-[#838C9C]">${formatPrice(p.entry_price)}</td>
+                      <td className="p-4 text-white font-bold bg-[#0B0C10]/50">${formatPrice(p.current_mark_price)}</td>
+                      <td className="p-4 font-bold font-mono text-white">
+                        {p.pips !== undefined ? (
+                          <span className={p.pips >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}>
+                            {p.pips >= 0 ? `+${p.pips.toFixed(1)}` : p.pips.toFixed(1)} pips
+                          </span>
+                        ) : (
+                          <span className="text-[#838C9C]">-</span>
+                        )}
+                      </td>
+                      <td className="p-4 text-[#838C9C]">
+                        <span className="text-[#FF1744]/80 font-bold">${formatPrice(p.stop_loss || 0)}</span> / <span className="text-[#00E676]/80 font-bold">${formatPrice(p.take_profit || 0)}</span>
+                      </td>
+                      <td className="p-4 text-[#FFD600] font-bold">{p.ai_confidence_score || 'N/A'}%</td>
+                      <td className={`p-4 font-bold text-sm bg-[#0B0C10]/50 ${pnlClass}`}>
+                        <div>{isGain ? `+$${p.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(p.unrealized_pnl).toFixed(2)}`}</div>
+                        {p.pnl_pct !== undefined && (
+                          <div className="text-[10px] font-mono">
+                            {p.pnl_pct >= 0 ? `+${p.pnl_pct.toFixed(2)}%` : `${p.pnl_pct.toFixed(2)}%`}
+                          </div>
+                        )}
+                      </td>
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={(e) => {
+                              e.stopPropagation();
+                              handleClosePosition(p.id, p.account_mode);
+                          }}
+                          className="px-4 py-2 bg-[#1F2833] hover:bg-[#FF1744] text-white font-bold rounded text-[11px] transition-colors border border-[#1F2833] hover:border-[#FF1744] group-hover:shadow-[0_0_10px_rgba(255,23,68,0.2)] uppercase tracking-wider"
+                        >
+                          CLOSE MARKET
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

@@ -11,6 +11,8 @@ interface ClosedPosition {
   quantity: number;
   entry_price: number;
   realized_pnl: number;
+  pnl_pct?: number;
+  pips?: number;
   status: string;
   opened_at: string;
   closed_at: string;
@@ -47,7 +49,8 @@ export default function ClosedTrades() {
                 <th className="p-4">Symbol</th>
                 <th className="p-4">Side</th>
                 <th className="p-4">Entry</th>
-                <th className="p-4">PnL</th>
+                <th className="p-4">Pips</th>
+                <th className="p-4">Realized PnL</th>
                 <th className="p-4">Duration</th>
                 <th className="p-4">Closed At</th>
               </tr>
@@ -55,7 +58,7 @@ export default function ClosedTrades() {
             <tbody className="divide-y divide-[#1F2833]">
               {trades.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-4 text-center text-[#838C9C]">No closed trades yet.</td>
+                  <td colSpan={7} className="p-4 text-center text-[#838C9C]">No closed trades yet.</td>
                 </tr>
               ) : (
                 trades.slice().reverse().map((t) => (
@@ -63,8 +66,20 @@ export default function ClosedTrades() {
                     <td className="p-4 text-white font-bold">{t.symbol}</td>
                     <td className={`p-4 ${t.side === "BUY" ? "text-[#00E676]" : "text-[#FF1744]"}`}>{t.side}</td>
                     <td className="p-4 text-[#838C9C]">${t.entry_price}</td>
+                    <td className="p-4 text-white font-bold">
+                      {t.pips !== undefined ? (
+                        <span className={t.pips >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}>
+                          {t.pips >= 0 ? `+${t.pips.toFixed(1)}` : t.pips.toFixed(1)} pips
+                        </span>
+                      ) : "-"}
+                    </td>
                     <td className={`p-4 font-bold ${t.realized_pnl >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}`}>
-                      {t.realized_pnl >= 0 ? `+$${t.realized_pnl.toFixed(2)}` : `-$${Math.abs(t.realized_pnl).toFixed(2)}`}
+                      <div>{t.realized_pnl >= 0 ? `+$${t.realized_pnl.toFixed(2)}` : `-$${Math.abs(t.realized_pnl).toFixed(2)}`}</div>
+                      {t.pnl_pct !== undefined && (
+                        <div className="text-[10px] opacity-80">
+                          {t.pnl_pct >= 0 ? `+${t.pnl_pct.toFixed(2)}%` : `${t.pnl_pct.toFixed(2)}%`}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4 text-[#E6E9EF]">{calculateDuration(t.opened_at, t.closed_at)}</td>
                     <td className="p-4 text-[#838C9C]">{new Date(t.closed_at).toLocaleTimeString()}</td>
