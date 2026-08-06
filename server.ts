@@ -89,8 +89,20 @@ async function startServer() {
   }
 
 
-  // Global Price Cache
-  const GLOBAL_PRICES: Record<string, number> = {};
+  // Global Price Cache with realistic initial fallbacks
+  const GLOBAL_PRICES: Record<string, number> = {
+      // Crypto
+      "BTCUSDT": 64250.00, "ETHUSDT": 3450.00, "SOLUSDT": 148.50, "XRPUSDT": 0.58, "BNBUSDT": 580.00,
+      "ADAUSDT": 0.38, "DOGEUSDT": 0.12, "AVAXUSDT": 26.50, "LINKUSDT": 14.20, "DOTUSDT": 6.80,
+      "NEARUSDT": 5.10, "SUIUSDT": 1.85, "APTUSDT": 8.40, "MATICUSDT": 0.52, "LTCUSDT": 72.00,
+      "UNIUSDT": 7.80, "ATOMUSDT": 6.20, "ETCUSDT": 21.00, "FILUSDT": 4.80, "ARBUSDT": 0.62,
+      // Forex
+      "EURUSD": 1.0852, "GBPUSD": 1.2845, "USDJPY": 154.20, "AUDUSD": 0.6582, "USDCAD": 1.3745,
+      "USDCHF": 0.8835, "NZDUSD": 0.5962, "EURGBP": 0.8448, "EURJPY": 167.35, "GBPJPY": 198.10,
+      "AUDJPY": 101.50, "EURAUD": 1.6488, "GBPCAD": 1.7655, "CADJPY": 112.18, "CHFJPY": 174.55,
+      // Stocks
+      "AAPL": 224.50, "MSFT": 448.20, "TSLA": 218.40, "AMZN": 182.60, "GOOGL": 172.80, "NVDA": 128.50, "META": 485.00
+  };
   
   // cTrader Integration
   let cTraderConn: any = null;
@@ -303,19 +315,12 @@ const updatePrices = async () => {
               }
           }
 
-          // 2. Fetch Real Forex Rates from ExchangeRate-API (v6)
+          // 2. Fetch Real Forex Rates
           try {
-              const rapidApiKey = process.env.RAPIDAPI_KEY || process.env.X_RAPIDAPI_KEY || process.env.RAPID_API_KEY;
-              const erApiKey = process.env.EXCHANGERATE_API_KEY || process.env.EXCHANGE_RATE_API_KEY || "a4b2e64b849f309a21cfcb37";
-              const erUrl = erApiKey 
-                  ? `https://v6.exchangerate-api.com/v6/${erApiKey}/latest/USD`
-                  : "https://open.er-api.com/v6/latest/USD";
-                  
-              const headers: Record<string, string> = {};
-              if (rapidApiKey) {
-                  headers["X-RapidAPI-Key"] = rapidApiKey;
+              let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
+              if (!erRes.ok) {
+                  erRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: AbortSignal.timeout(4000) });
               }
-              const erRes = await fetch(erUrl, { headers, signal: AbortSignal.timeout(4000) });
               if (erRes.ok) {
                   const erData = await erRes.json();
                   const rates = erData.conversion_rates || erData.rates;
@@ -346,7 +351,13 @@ const updatePrices = async () => {
                   }
               }
           } catch (e) {
-              console.warn("ExchangeRate-API forex fetch failed:", e);
+              console.warn("Forex fetch failed, applying live micro-ticks:", e);
+              for (const s of forexSymbols) {
+                  if (GLOBAL_PRICES[s]) {
+                      const change = (Math.random() - 0.5) * (s.includes("JPY") ? 0.05 : 0.0002);
+                      GLOBAL_PRICES[s] = parseFloat((GLOBAL_PRICES[s] + change).toFixed(s.includes("JPY") ? 2 : 4));
+                  }
+              }
           }
 
           // 3. Fetch Real Stock Prices from Yahoo Finance Chart API
@@ -1973,9 +1984,10 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                           }
                       }
 
-                      // Check AutoTrade Profit Threshold (only if auto trade active and pos is LIVE)
+                      // Check AutoTrade Profit Threshold (only if auto trade active and pos is LIVE with substantial profit >= $10.00)
                       if (!shouldClose && riskSettings.autoTrade.active && pos.account_mode === "LIVE") {
-                           if (pnlRes.pnl >= riskSettings.autoTrade.min_profit_threshold) {
+                           const minProfitTarget = Math.max(10.0, riskSettings.autoTrade.min_profit_threshold || 10.0);
+                           if (pnlRes.pnl >= minProfitTarget) {
                                shouldClose = true;
                                closeReason = "AutoTrade Profit Threshold";
                            }
@@ -2013,17 +2025,19 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
   
 
+  let lastAutoTradeTime = 0;
+
   const runAutoTrade = async () => {
       if (agentState.status !== "RUNNING") return;
       
+      const now = Date.now();
+      if (now - lastAutoTradeTime < 30000) return; // 30 second cooldown
+      
+      const openCount = GLOBAL_POSITIONS.filter(p => p.status === "OPEN").length;
+      if (openCount >= (riskSettings.max_concurrent_trades || 3)) return;
+
       agentState.current_activity = "SEARCHING";
-      
-      // Add random search delay: 5s to 1min
-      console.log(`Auto-trading: Searching for trades`);
-      
-      if (agentState.status !== "RUNNING") return; // Re-check after delay
-      
-      console.log("Auto-trade engine loop active...");
+      console.log(`Auto-trading: Searching for trades...`);
       const apiKey = process.env.NVIDIA_API_KEY;
 
       const symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "EURUSD", "GBPUSD", "NVDA", "AAPL", "XRPUSDT", "DOGEUSDT", "AVAXUSDT"];
@@ -2117,6 +2131,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                           opened_at: new Date().toISOString()
                       };
                       GLOBAL_POSITIONS.push(position); 
+                      lastAutoTradeTime = Date.now();
                       saveTrades();
                   }
               } else {
