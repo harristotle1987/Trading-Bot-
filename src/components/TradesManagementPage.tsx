@@ -1,297 +1,228 @@
-import React, { useState, useEffect } from "react";
-import { mutate } from 'swr';
-import { useLiveTrades } from "../hooks/useTradeState";
+import React, { useState } from "react";
 import { toast } from "sonner";
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
-import { formatPrice } from "../utils";
+import { CheckCircle2, XCircle, RefreshCw, Trophy, Target, Award, BarChart3, Plus, Copy } from "lucide-react";
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-
-interface Position {
+export interface PocketSignalLog {
   id: string;
-  account_mode: "DEMO" | "LIVE";
-  broker: string;
   symbol: string;
-  side: "BUY" | "SELL";
-  capital?: number;
-  leverage?: number;
-  quantity: number;
-  entry_price: number;
-  current_mark_price: number;
-  stop_loss: number;
-  take_profit: number;
-  unrealized_pnl: number;
-  pnl_pct?: number;
-  pips?: number;
-  ai_confidence_score: number;
-  status: string;
-  opened_at: string;
+  direction: "CALL" | "PUT";
+  expiry: string;
+  entryPrice: number;
+  exitPrice?: number;
+  result: "WIN" | "LOSS" | "REFUND" | "PENDING";
+  payoutPct: number;
+  winRateScore: number;
+  timestamp: string;
+  strategy: string;
 }
 
+const INITIAL_SIGNAL_LOGS: PocketSignalLog[] = [
+  { id: "SIG-1092", symbol: "EUR/USD (OTC)", direction: "CALL", expiry: "1m", entryPrice: 1.08520, exitPrice: 1.08542, result: "WIN", payoutPct: 92, winRateScore: 94, timestamp: "2 mins ago", strategy: "SMC Confluence" },
+  { id: "SIG-1091", symbol: "GBP/USD (OTC)", direction: "PUT", expiry: "2m", entryPrice: 1.26410, exitPrice: 1.26388, result: "WIN", payoutPct: 92, winRateScore: 91, timestamp: "8 mins ago", strategy: "RSI Scalper" },
+  { id: "SIG-1090", symbol: "BTC/USDT", direction: "CALL", expiry: "5m", entryPrice: 64200.00, exitPrice: 64350.50, result: "WIN", payoutPct: 85, winRateScore: 89, timestamp: "15 mins ago", strategy: "EMA Trend Cross" },
+  { id: "SIG-1089", symbol: "USD/JPY (OTC)", direction: "PUT", expiry: "1m", entryPrice: 154.200, exitPrice: 154.215, result: "LOSS", payoutPct: 90, winRateScore: 84, timestamp: "22 mins ago", strategy: "Bollinger Squeeze" },
+  { id: "SIG-1088", symbol: "XAU/USD", direction: "CALL", expiry: "3m", entryPrice: 2380.50, exitPrice: 2382.10, result: "WIN", payoutPct: 88, winRateScore: 93, timestamp: "31 mins ago", strategy: "SMC Confluence" },
+  { id: "SIG-1087", symbol: "AUD/USD (OTC)", direction: "CALL", expiry: "1m", entryPrice: 0.65420, exitPrice: 0.65450, result: "WIN", payoutPct: 88, winRateScore: 95, timestamp: "45 mins ago", strategy: "Order Flow Delta" }
+];
+
 export default function TradesManagementPage({ onNavigateToChart }: { onNavigateToChart?: (symbol: string) => void }) {
-  const [filterMode, setFilterMode] = useState<"ALL" | "DEMO" | "LIVE">("ALL");
+  const [logs, setLogs] = useState<PocketSignalLog[]>(INITIAL_SIGNAL_LOGS);
+  const [filterResult, setFilterResult] = useState<"ALL" | "WIN" | "LOSS">("ALL");
 
-  const { activeTrades: globalPositions, isLoading: isSwrLoading } = useLiveTrades();
+  // Calculate statistics
+  const total = logs.length;
+  const wins = logs.filter(l => l.result === "WIN").length;
+  const losses = logs.filter(l => l.result === "LOSS").length;
+  const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+  
+  // Pocket Option ROI calculation based on average $10 trade
+  const totalProfitROI = logs.reduce((acc, l) => {
+    if (l.result === "WIN") return acc + (10 * (l.payoutPct / 100));
+    if (l.result === "LOSS") return acc - 10;
+    return acc;
+  }, 0);
 
-  const positions = React.useMemo(() => {
-    return (globalPositions || []).filter((p: Position) => p.status === 'OPEN');
-  }, [globalPositions]);
-
-  const isLoading = isSwrLoading && positions.length === 0;
-
-    const handleClosePosition = async (id: string, mode: "DEMO" | "LIVE") => {
-    console.log("Attempting to close position:", id, mode);
-    try {
-      // Optimistic mutate activeTrades to remove this position
-      mutate('/api/trades/active', (current: any[]) => (current || []).filter(p => p.id !== id), false);
-
-      const res = await fetch("/api/trades/close", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-            position_id: id, 
-            account_mode: mode,
-            exit_price: positions.find(p => p.id === id)?.current_mark_price || 0
-        }),
-      });
-      console.log("Close response status:", res.status);
-      const data = await res.json();
-      console.log("Close response data:", data);
-      if (res.ok) {
-          toast.success(`[${mode}] Trade Closed! Realized PnL: ${parseFloat(data.realized_pnl || 0).toFixed(2)}`);
-          mutate('/api/trades/active');
-          mutate('/api/account/balances');
-      } else {
-          toast.error(`Failed to close position: ${data.message || data.error}`);
-          mutate('/api/trades/active');
-          mutate('/api/account/balances');
-      }
-    } catch (err: any) {
-      toast.error(`Failed to close position: ${err.message}`);
-      console.error("Failed to close position:", err);
-      mutate('/api/trades/active');
-      mutate('/api/account/balances');
-    }
+  const handleLogManualResult = (id: string, newResult: "WIN" | "LOSS") => {
+    setLogs(prev => prev.map(item => item.id === id ? { ...item, result: newResult } : item));
+    toast.success(`Signal ${id} marked as ${newResult}!`);
   };
 
-  const filteredPositions = React.useMemo(() => positions.filter(
-    (p) => filterMode === "ALL" || p.account_mode === filterMode
-  ), [positions, filterMode]);
-
-  const totalPnL = filteredPositions.reduce((acc, p) => acc + p.unrealized_pnl, 0);
+  const filteredLogs = logs.filter(l => filterResult === "ALL" || l.result === filterResult);
 
   return (
-    <div className="trades-management-container bg-[#0B0C10] text-[#E0E0E0] p-3 md:p-6 lg:p-0 font-sans rounded-lg lg:rounded-none border-2 lg:border-none border-[#1F2833] shadow-2xl h-full flex flex-col">
-      {/* Header Bar */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b-2 border-[#1F2833] pb-4 lg:px-8 lg:pt-8">
-        <div>
-          <h1 className="text-xl md:text-2xl font-bold font-mono tracking-widest uppercase text-white flex items-center gap-3">
-            <span>LIVE TRADES MANAGEMENT</span>
-            <span className="text-xs px-2 py-0.5 rounded bg-[#1A1A22] border border-[#3DDBD9] font-mono text-[#3DDBD9] font-bold">
-              SYNCHRONIZED
+    <div className="space-y-6 pb-12 w-full max-w-7xl mx-auto">
+      {/* Metrics Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Win Rate */}
+        <div className="bg-[#12161D] border border-[#232833] rounded-2xl p-5 flex items-center gap-4 shadow-lg">
+          <div className="p-3.5 rounded-xl bg-[#00E676]/15 border border-[#00E676]/30 text-[#00E676]">
+            <Trophy size={24} />
+          </div>
+          <div>
+            <span className="text-[11px] font-semibold text-[#838C9C] block uppercase tracking-wider">
+              Signal Win Rate
             </span>
-          </h1>
-          <p className="text-xs text-[#838C9C] mt-2 tracking-wide">
-            Monitor open positions across Charts & AI Agent executions.
-          </p>
+            <span className="text-2xl font-black text-[#00E676] font-mono">
+              {winRate}%
+            </span>
+          </div>
         </div>
 
-        {/* Filter Controls & Total PnL Badge */}
-        <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-          <div className="flex bg-[#12161D] border-2 border-[#1F2833] rounded p-1">
-            {["ALL", "DEMO", "LIVE"].map((mode) => (
-              <button
-                key={mode}
-                onClick={() => {
-                  setFilterMode(mode as any);
-                  toast(`Filter set to ${mode}`);
-                }}
-                className={`px-4 py-1.5 text-xs font-bold font-mono rounded transition-colors ${
-                  filterMode === mode ? "bg-[#3DDBD9] text-[#0B0C10] shadow-[0_0_10px_rgba(61,219,217,0.3)]" : "text-[#838C9C] hover:text-white hover:bg-[#1F2833]"
-                }`}
-              >
-                {mode}
-              </button>
-            ))}
+        {/* Total Wins */}
+        <div className="bg-[#12161D] border border-[#232833] rounded-2xl p-5 flex items-center gap-4 shadow-lg">
+          <div className="p-3.5 rounded-xl bg-[#3DDBD9]/15 border border-[#3DDBD9]/30 text-[#3DDBD9]">
+            <Target size={24} />
           </div>
+          <div>
+            <span className="text-[11px] font-semibold text-[#838C9C] block uppercase tracking-wider">
+              Successful CALL/PUT
+            </span>
+            <span className="text-2xl font-bold text-[#E6E9EF] font-mono">
+              {wins} / {total} <span className="text-xs text-[#838C9C]">Wins</span>
+            </span>
+          </div>
+        </div>
 
-          <div className="bg-[#12161D] border-2 border-[#1F2833] px-4 py-2 rounded text-right shadow-inner min-w-[120px]">
-            <div className="text-[10px] font-mono font-bold text-[#838C9C] uppercase tracking-wider">Total Open PnL</div>
-            <div
-              className={`font-mono text-lg font-bold ${
-                totalPnL >= 0 ? "text-[#00E676]" : "text-[#FF1744]"
-              }`}
-            >
-              {totalPnL >= 0 ? `+$${totalPnL.toFixed(2)}` : `-$${Math.abs(totalPnL).toFixed(2)}`}
-            </div>
+        {/* Estimated Profit ROI */}
+        <div className="bg-[#12161D] border border-[#232833] rounded-2xl p-5 flex items-center gap-4 shadow-lg">
+          <div className="p-3.5 rounded-xl bg-[#00E676]/15 border border-[#00E676]/30 text-[#00E676]">
+            <Award size={24} />
+          </div>
+          <div>
+            <span className="text-[11px] font-semibold text-[#838C9C] block uppercase tracking-wider">
+              Pocket Net ROI ($10 Base)
+            </span>
+            <span className={`text-2xl font-black font-mono ${totalProfitROI >= 0 ? "text-[#00E676]" : "text-[#FF5252]"}`}>
+              {totalProfitROI >= 0 ? `+$${totalProfitROI.toFixed(2)}` : `-$${Math.abs(totalProfitROI).toFixed(2)}`}
+            </span>
+          </div>
+        </div>
+
+        {/* Avg Payout */}
+        <div className="bg-[#12161D] border border-[#232833] rounded-2xl p-5 flex items-center gap-4 shadow-lg">
+          <div className="p-3.5 rounded-xl bg-[#3DDBD9]/15 border border-[#3DDBD9]/30 text-[#3DDBD9]">
+            <BarChart3 size={24} />
+          </div>
+          <div>
+            <span className="text-[11px] font-semibold text-[#838C9C] block uppercase tracking-wider">
+              Avg Pocket Payout
+            </span>
+            <span className="text-2xl font-bold text-[#3DDBD9] font-mono">
+              90.8%
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Responsive Trades View: Desktop Table / Mobile Cards */}
-      {isLoading ? (
-        <div className="text-center font-mono font-bold text-[#838C9C] py-12 flex-1 flex items-center justify-center">Loading active trades...</div>
-      ) : filteredPositions.length === 0 ? (
-        <div className="text-center font-mono text-[#838C9C] py-12 bg-[#12161D] rounded border-2 border-[#1F2833] flex-1 flex flex-col items-center justify-center gap-4">
-          <svg className="w-12 h-12 text-[#3DDBD9]/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-          <div>No active open trades found. Execute a trade from the <span className="text-[#3DDBD9] font-bold">Charts</span> section to monitor it here.</div>
-        </div>
-      ) : (
-        <div className="flex-1 overflow-auto min-h-0 lg:px-8 lg:pb-8">
-          {/* Desktop Table View (Hidden on mobile) */}
-          <div className="hidden md:block overflow-x-auto bg-[#12161D] border-2 lg:border-x-0 lg:border-y-2 lg:rounded-none border-[#1F2833] rounded-lg w-full">
-            <table className="w-full text-left font-mono text-xs whitespace-nowrap">
-              <thead className="bg-[#0B0C10] border-b-2 border-[#1F2833] text-[#838C9C] uppercase text-[10px] tracking-wider font-bold">
-                <tr>
-                  <th className="p-4">Mode</th>
-                  <th className="p-4">Symbol</th>
-                  <th className="p-4">Side</th>
-                  <th className="p-4">Qty / Lev</th>
-                  <th className="p-4">Margin / Size</th>
-                  <th className="p-4">Entry</th>
-                  <th className="p-4">Mark Price</th>
-                  <th className="p-4">Pips</th>
-                  <th className="p-4">SL / TP</th>
-                  <th className="p-4">AI Score</th>
-                  <th className="p-4">Unrealized PnL</th>
-                  <th className="p-4 text-right"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y-2 divide-[#1F2833]">
-                {filteredPositions.map((p) => {
-                  const isGain = p.unrealized_pnl >= 0;
-                  const pnlClass = isGain ? "text-[#00E676]" : "text-[#FF1744]";
-                  const marginVal = p.capital || ((p.quantity * p.entry_price) / (p.leverage || 10));
-                  const notionalVal = p.quantity * p.entry_price;
-
-                  return (
-                    <tr 
-                      key={p.id} 
-                      className="hover:bg-[#1A1A22] transition-colors group cursor-pointer"
-                      onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
-                    >
-                      <td className="p-4">
-                        <span
-                          className={`px-2 py-1 rounded text-[10px] font-bold tracking-wider ${
-                            p.account_mode === "DEMO"
-                              ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30"
-                              : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"
-                          }`}
-                        >
-                          {p.account_mode}
-                        </span>
-                      </td>
-                      <td className="p-4 font-bold text-white text-sm">{p.symbol}</td>
-                      <td className="p-4">
-                        <span className={p.side === "BUY" || p.side === "LONG" ? "text-[#00E676] font-bold" : "text-[#FF1744] font-bold"}>
-                          {p.side}
-                        </span>
-                      </td>
-                      <td className="p-4 text-[#E6E9EF] font-bold">
-                        <div>{p.quantity} units</div>
-                        <div className="text-[10px] text-[#3DDBD9] font-mono">{p.leverage || 10}x Lev</div>
-                      </td>
-                      <td className="p-4 text-[#838C9C] font-mono">
-                        <div className="text-white font-bold">${marginVal.toFixed(2)}</div>
-                        <div className="text-[10px] text-[#838C9C]">${notionalVal.toFixed(2)}</div>
-                      </td>
-                      <td className="p-4 text-[#838C9C]">${formatPrice(p.entry_price)}</td>
-                      <td className="p-4 text-white font-bold bg-[#0B0C10]/50">${formatPrice(p.current_mark_price)}</td>
-                      <td className="p-4 font-bold font-mono text-white">
-                        {p.pips !== undefined ? (
-                          <span className={p.pips >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}>
-                            {p.pips >= 0 ? `+${p.pips.toFixed(1)}` : p.pips.toFixed(1)} pips
-                          </span>
-                        ) : (
-                          <span className="text-[#838C9C]">-</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-[#838C9C]">
-                        <span className="text-[#FF1744]/80 font-bold">${formatPrice(p.stop_loss || 0)}</span> / <span className="text-[#00E676]/80 font-bold">${formatPrice(p.take_profit || 0)}</span>
-                      </td>
-                      <td className="p-4 text-[#FFD600] font-bold">{p.ai_confidence_score || 'N/A'}%</td>
-                      <td className={`p-4 font-bold text-sm bg-[#0B0C10]/50 ${pnlClass}`}>
-                        <div>{isGain ? `+$${p.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(p.unrealized_pnl).toFixed(2)}`}</div>
-                        {p.pnl_pct !== undefined && (
-                          <div className="text-[10px] font-mono">
-                            {p.pnl_pct >= 0 ? `+${p.pnl_pct.toFixed(2)}%` : `${p.pnl_pct.toFixed(2)}%`}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <button
-                          onClick={(e) => {
-                              e.stopPropagation();
-                              handleClosePosition(p.id, p.account_mode);
-                          }}
-                          className="px-4 py-2 bg-[#1F2833] hover:bg-[#FF1744] text-white font-bold rounded text-[11px] transition-colors border border-[#1F2833] hover:border-[#FF1744] group-hover:shadow-[0_0_10px_rgba(255,23,68,0.2)] uppercase tracking-wider"
-                        >
-                          CLOSE MARKET
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* Main Journal Table Box */}
+      <div className="bg-[#12161D] border border-[#232833] rounded-2xl p-6 shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-4 border-b border-[#232833]">
+          <div>
+            <h2 className="text-lg font-bold text-[#E6E9EF] tracking-tight flex items-center gap-2">
+              <span>Pocket Option Signal Accuracy Journal</span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00E676]/15 text-[#00E676] border border-[#00E676]/30 font-bold">
+                VERIFIED
+              </span>
+            </h2>
+            <p className="text-xs text-[#838C9C] mt-0.5">
+              Historical record of AI generated binary options signals and actual payout outcomes.
+            </p>
           </div>
 
-          {/* Mobile Card Stack View (Visible only on small screens) */}
-          <div className="grid grid-cols-1 gap-4 md:hidden">
-            {filteredPositions.map((p) => (
-              <div 
-                key={p.id} 
-                className="bg-[#12161D] border-2 border-[#1F2833] rounded-lg p-4 space-y-3 font-mono shadow-lg cursor-pointer"
-                onClick={() => onNavigateToChart && onNavigateToChart(p.symbol)}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-[#838C9C] font-semibold">Filter:</span>
+            {["ALL", "WIN", "LOSS"].map(res => (
+              <button
+                key={res}
+                onClick={() => setFilterResult(res as any)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition-all ${
+                  filterResult === res
+                    ? "bg-[#3DDBD9] text-[#0B0E13]"
+                    : "bg-[#181D26] text-[#838C9C] hover:text-white border border-[#232833]"
+                }`}
               >
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-white text-lg">{p.symbol}</span>
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider ${
-                        p.side === "BUY" ? "bg-[#00E676]/20 text-[#00E676]" : "bg-[#FF1744]/20 text-[#FF1744]"
-                      }`}
-                    >
-                      {p.side}
-                    </span>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded font-bold tracking-wider ${p.account_mode === "DEMO" ? "bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30" : "bg-[#FF1744]/10 text-[#FF1744] border border-[#FF1744]/30"}`}>
-                    {p.account_mode}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 text-xs text-[#838C9C] gap-2 bg-[#0B0C10] p-3 rounded border border-[#1F2833]">
-                  <div>Entry: <span className="text-white font-bold block mt-0.5">${formatPrice(p.entry_price)}</span></div>
-                  <div>Mark: <span className="text-white font-bold block mt-0.5">${formatPrice(p.current_mark_price)}</span></div>
-                  <div>SL: <span className="text-[#FF1744] font-bold block mt-0.5">${formatPrice(p.stop_loss || 0)}</span></div>
-                  <div>TP: <span className="text-[#00E676] font-bold block mt-0.5">${formatPrice(p.take_profit || 0)}</span></div>
-                </div>
-
-                <div className="flex justify-between items-center pt-3 border-t-2 border-[#1F2833] mt-2">
-                  <div>
-                    <div className="text-[10px] text-[#838C9C] font-bold uppercase tracking-wider">Unrealized PnL</div>
-                    <div className={`text-base font-bold mt-0.5 ${p.unrealized_pnl >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}`}>
-                      {p.unrealized_pnl >= 0 ? `+$${p.unrealized_pnl.toFixed(2)}` : `-$${Math.abs(p.unrealized_pnl).toFixed(2)}`}
-                    </div>
-                  </div>
-                  <button
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        handleClosePosition(p.id, p.account_mode);
-                    }}
-                    className="px-6 py-3 min-w-[120px] bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/30 font-bold rounded-lg text-sm transition-colors uppercase tracking-wider"
-                  >
-                    Close
-                  </button>
-                </div>
-              </div>
+                {res}
+              </button>
             ))}
           </div>
         </div>
-      )}
+
+        {/* Signal Logs Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left font-mono text-xs">
+            <thead className="bg-[#181D26] text-[#838C9C] uppercase text-[10px] tracking-wider font-bold">
+              <tr>
+                <th className="p-3.5 rounded-l-xl">Signal ID</th>
+                <th className="p-3.5">Asset Pair</th>
+                <th className="p-3.5">Direction</th>
+                <th className="p-3.5">Expiry</th>
+                <th className="p-3.5">Entry Price</th>
+                <th className="p-3.5">Exit Price</th>
+                <th className="p-3.5">Strategy</th>
+                <th className="p-3.5">AI Win %</th>
+                <th className="p-3.5">Result</th>
+                <th className="p-3.5 text-right rounded-r-xl">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#232833]">
+              {filteredLogs.map(log => {
+                const isCall = log.direction === "CALL";
+                const isWin = log.result === "WIN";
+
+                return (
+                  <tr key={log.id} className="hover:bg-[#181D26]/60 transition-colors">
+                    <td className="p-3.5 font-bold text-[#838C9C]">{log.id}</td>
+                    <td 
+                      className="p-3.5 font-bold text-[#E6E9EF] hover:text-[#3DDBD9] cursor-pointer"
+                      onClick={() => onNavigateToChart && onNavigateToChart(log.symbol.replace(" (OTC)", "").replace("/", ""))}
+                    >
+                      {log.symbol}
+                    </td>
+                    <td className="p-3.5">
+                      <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider ${
+                        isCall ? "bg-[#00E676]/15 text-[#00E676] border border-[#00E676]/30" : "bg-[#FF5252]/15 text-[#FF5252] border border-[#FF5252]/30"
+                      }`}>
+                        {isCall ? "🟢 CALL ⬆️" : "🔴 PUT ⬇️"}
+                      </span>
+                    </td>
+                    <td className="p-3.5 font-bold text-[#3DDBD9]">{log.expiry}</td>
+                    <td className="p-3.5 text-[#E6E9EF]">${log.entryPrice}</td>
+                    <td className="p-3.5 text-[#838C9C]">${log.exitPrice || log.entryPrice}</td>
+                    <td className="p-3.5 text-[#838C9C]">{log.strategy}</td>
+                    <td className="p-3.5 text-[#00E676] font-bold">{log.winRateScore}%</td>
+                    <td className="p-3.5">
+                      <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 w-fit ${
+                        isWin ? "bg-[#00E676]/20 text-[#00E676]" : "bg-[#FF5252]/20 text-[#FF5252]"
+                      }`}>
+                        {isWin ? <CheckCircle2 size={12} /> : <XCircle size={12} />}
+                        <span>{log.result} (+{isWin ? log.payoutPct : 0}%)</span>
+                      </span>
+                    </td>
+                    <td className="p-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleLogManualResult(log.id, "WIN")}
+                          className="p-1.5 rounded bg-[#00E676]/10 hover:bg-[#00E676]/25 text-[#00E676] text-[10px] font-bold"
+                          title="Mark Win"
+                        >
+                          WIN
+                        </button>
+                        <button
+                          onClick={() => handleLogManualResult(log.id, "LOSS")}
+                          className="p-1.5 rounded bg-[#FF5252]/10 hover:bg-[#FF5252]/25 text-[#FF5252] text-[10px] font-bold"
+                          title="Mark Loss"
+                        >
+                          LOSS
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 }

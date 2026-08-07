@@ -1,6 +1,6 @@
 {
-  "name": "Trading Bot System",
-  "description": "Private CRM and Trading Bot System with an Obsidian UI style.",
+  "name": "Pocket Option Signal Bot",
+  "description": "High-precision Pocket Option binary options signal bot with live CALL/PUT indicators, expiry filters, OTC payout tracking, and 1-click signal copy.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

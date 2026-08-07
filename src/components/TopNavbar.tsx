@@ -1,126 +1,72 @@
-import { mutate } from 'swr';
-import React, { useState, useEffect } from "react";
-import { useAccountBalance } from "../hooks/useTradeState";
+import React, { useState } from "react";
+import { Zap, Radio, ExternalLink, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 
-interface WalletMetrics {
-  total_equity: number;
-  available_balance: number;
-  currency: string;
-  status: string;
-}
+export default function TopNavbar({ onReset }: { onReset?: () => void }) {
+  const [isResetting, setIsResetting] = useState(false);
 
-export default function TopNavbar() {
-  const [activeMode, setActiveMode] = useState<"DEMO" | "LIVE">("DEMO");
-  const [needsAuth, setNeedsAuth] = useState(false);
-  const { balances } = useAccountBalance();
-
-  const checkAuthStatus = async () => {
+  const handleReset = async () => {
+    if (isResetting) return;
+    setIsResetting(true);
+    
     try {
-      const res = await fetch("/api/config/keys", { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setNeedsAuth(data.ctrader_needs_auth);
+      await fetch('/api/system/reset', { method: 'POST' });
+      toast.success("System Reset Triggered");
+      if (onReset) {
+        onReset();
+      } else {
+        window.location.reload();
       }
     } catch (err) {
-      console.warn("Failed to fetch auth status:", err);
+      toast.error("Failed to reset system");
+    } finally {
+      setIsResetting(false);
     }
   };
 
-  
-
-  useEffect(() => {
-        checkAuthStatus();
-    const interval = setInterval(() => {
-                checkAuthStatus();
-    }, 5000); // Auto refresh cash balances every 5s
-    
-    const handleBalanceUpdated = () => mutate('/api/account/balances');
-    window.addEventListener("balance_updated", handleBalanceUpdated);
-
-    // Listen for OAuth success message from popup
-    const handleMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'CTRADER_OAUTH_SUCCESS') {
-            setNeedsAuth(false);
-            // Give server a moment to reconnect, then fetch balances
-            setTimeout(() => mutate('/api/account/balances'), 2000);
-        }
-    };
-    window.addEventListener('message', handleMessage);
-
-    return () => {
-        clearInterval(interval);
-        window.removeEventListener("balance_updated", handleBalanceUpdated);
-        window.removeEventListener('message', handleMessage);
-    };
-  }, []);
-
-  const handleCTraderAuth = () => {
-      window.open("/api/ctrader/auth", "_blank", "width=600,height=800");
-  };
-
   return (
-    <header className="h-[60px] border-b border-[#232833] bg-[#0B0E13] flex items-center justify-between px-8 z-30 font-sans">
-      <div className="flex items-center gap-6">
-          <div className="font-mono font-bold text-white text-base tracking-wider flex items-center gap-2">
-            <img src="/logo.png" alt="Logo" className="w-8 h-8" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#00E676] inline-block animate-pulse"></span>
-          </div>
-      </div>
-      {/* Capital & Mode Display Badges */}
+    <header className="h-[60px] border-b border-[#232833] bg-[#0B0E13] flex items-center justify-between px-4 md:px-8 z-30 font-sans">
       <div className="flex items-center gap-3">
-        {needsAuth && (
-          <button
-            onClick={handleCTraderAuth}
-            className="animate-pulse mr-2 cursor-pointer px-4 py-1.5 rounded border border-[#FF1744] bg-[#FF1744]/10 hover:bg-[#FF1744]/20 text-white transition-all flex items-center gap-2 font-mono text-xs"
-          >
-            <span className="w-2 h-2 rounded-full bg-[#FF1744]"></span>
-            <span className="font-bold text-[#FF1744]">cTrader Auth Required - Click Here</span>
-          </button>
-        )}
-        {/* DEMO CASH BADGE */}
-        <div
-          onClick={() => setActiveMode("DEMO")}
-          className={`cursor-pointer px-3 py-1.5 rounded border transition-all flex items-center gap-2 font-mono text-xs ${
-            activeMode === "DEMO"
-              ? "bg-[#00E676]/10 border-[#00E676] text-white"
-              : "bg-[#121216] border-[#1E1E24] text-[#838C9C] opacity-70 hover:opacity-100"
-          }`}
-        >
-          <span className="w-2 h-2 rounded-full bg-[#00E676]"></span>
-          <div>
-            <span className="text-[10px] uppercase text-[#838C9C] block leading-tight">DEMO CAPITAL</span>
-            <span className="font-bold text-[#00E676]">
-              ${balances.demo.total_equity.toLocaleString()} {balances.demo.currency}
-            </span>
+        <div className="p-2 rounded-xl bg-gradient-to-tr from-[#3DDBD9]/20 to-[#00E676]/20 border border-[#3DDBD9]/40 text-[#3DDBD9]">
+          <Zap size={20} className="text-[#3DDBD9]" />
+        </div>
+        <div>
+          <div className="font-mono font-extrabold text-white text-sm tracking-wide flex items-center gap-2">
+            <span>POCKET OPTION SIGNAL BOT</span>
+            <span className="w-2 h-2 rounded-full bg-[#00E676] inline-block animate-pulse"></span>
           </div>
+          <span className="text-[10px] text-[#838C9C] font-mono hidden sm:inline-block">
+            Binary Signal Engine (30s, 1m, 2m, 3m, 5m Expiry)
+          </span>
+        </div>
+      </div>
+
+      {/* Pocket Option Links & Live Stream Status */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={handleReset}
+          disabled={isResetting}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#FF453A]/10 border border-[#FF453A]/30 text-[#FF453A] text-xs font-bold hover:bg-[#FF453A]/20 transition-all"
+        >
+          <RefreshCw size={14} className={isResetting ? "animate-spin" : ""} />
+          <span className="hidden sm:inline">Reset System</span>
+        </button>
+
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#12161D] border border-[#232833] text-xs font-mono">
+          <Radio size={14} className="text-[#00E676] animate-pulse" />
+          <span className="text-[#838C9C]">Signal Stream:</span>
+          <span className="text-[#00E676] font-bold">ONLINE (92% Max Payout)</span>
         </div>
 
-        {/* BYBIT LIVE CASH BADGE */}
-        <div
-          onClick={() => setActiveMode("LIVE")}
-          className={`cursor-pointer px-3 py-1.5 rounded border transition-all flex items-center gap-2 font-mono text-xs ${
-            activeMode === "LIVE"
-              ? "bg-[#FFD600]/10 border-[#FFD600] text-white"
-              : "bg-[#121216] border-[#1E1E24] text-[#838C9C] opacity-70 hover:opacity-100"
-          }`}
+        <a
+          href="https://pocketoption.com"
+          target="_blank"
+          rel="noreferrer"
+          className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#3DDBD9] to-[#00E676] text-[#0B0E13] font-bold text-xs flex items-center gap-1.5 hover:opacity-90 transition-all shadow-md"
         >
-          <span
-            className={`w-2 h-2 rounded-full ${
-              balances.live.status === "ONLINE" ? "bg-[#FFD600] animate-ping" : "bg-gray-600"
-            }`}
-          ></span>
-          <div>
-            <span className="text-[10px] uppercase text-[#838C9C] block leading-tight flex items-center gap-1">
-              LIVE
-              <span className="text-[9px] text-[#FFD600]">
-                ({balances.live.status})
-              </span>
-            </span>
-            <span className="font-bold text-[#FFD600]">
-              ${balances.live.total_equity.toLocaleString()} {balances.live.currency}
-            </span>
-          </div>
-        </div>
+          <span>Pocket Option</span>
+          <ExternalLink size={13} />
+        </a>
       </div>
     </header>
   );
