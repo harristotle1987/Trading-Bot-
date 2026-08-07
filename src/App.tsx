@@ -43,6 +43,16 @@ export const TRADABLE_PAIRS = [
     { symbol: "ETCUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "FILUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "ARBUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "PEPEUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "SHIBUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "INJUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "RNDRUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "OPUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "TIAUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "AAVEUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "FETUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "WIFUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+
     // Forex
     { symbol: "EURUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "GBPUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
@@ -59,14 +69,26 @@ export const TRADABLE_PAIRS = [
     { symbol: "GBPCAD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "CADJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "CHFJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    // Stocks
+    { symbol: "EURNZD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "GBPAUD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+
+    // Commodities & Metals
+    { symbol: "XAUUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "XAGUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "USOIL", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+
+    // Stocks & Indices
     { symbol: "AAPL", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
     { symbol: "MSFT", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
     { symbol: "TSLA", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
     { symbol: "AMZN", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
     { symbol: "GOOGL", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
     { symbol: "NVDA", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
-    { symbol: "META", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] }
+    { symbol: "META", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "AMD", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "NFLX", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "PLTR", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] },
+    { symbol: "COIN", category: "stocks", timeframes: ["1m", "5m", "15m", "1h"] }
 ];
 
 const NAV_ITEMS = [

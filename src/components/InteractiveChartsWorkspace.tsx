@@ -420,11 +420,17 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
     
     const connectWebSocket = () => {
       const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category === 'forex';
-      
       const category = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category || "crypto";
+
+      const cleanSymbol = selectedSymbol.replace(/[\/-]/g, '').toUpperCase();
+      let binanceWsSymbol = cleanSymbol.toLowerCase();
+      if (!binanceWsSymbol.endsWith("usdt") && (category === "crypto" || cleanSymbol.includes("USDT") || ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "LINK", "DOT", "NEAR", "SUI", "APT", "MATIC", "LTC", "UNI", "ATOM", "ETC", "FIL", "ARB", "PEPE", "SHIB", "INJ", "RNDR", "OP", "TIA", "AAVE", "FET", "WIF"].includes(cleanSymbol))) {
+          binanceWsSymbol += "usdt";
+      }
+
       if (category === "crypto" && timeframe === "1s") {
           // Use Binance WebSocket for 1s data
-          const wsUrl = `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@kline_1s`;
+          const wsUrl = `wss://stream.binance.com:9443/ws/${binanceWsSymbol}@kline_1s`;
           ws = new WebSocket(wsUrl);
           
           ws.onmessage = (event) => {
@@ -449,7 +455,6 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
           };
       } else if (category === "forex" || category === "stocks") {
           // Bybit doesn't support forex, so we poll our own server for updates
-          let currentPrice = 1.0;
           let lastCandleTime = Math.floor(Date.now() / 1000);
           
           let intervalMs = 60000;
@@ -468,8 +473,9 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
               if (!isMounted) return clearInterval(updateInterval);
               try {
                   const data = globalPricesForChart;
-                  if (data[selectedSymbol]) {
-                      const newPrice = data[selectedSymbol];
+                  const targetPrice = data[selectedSymbol] || data[cleanSymbol];
+                  if (targetPrice) {
+                      const newPrice = targetPrice;
                       
                       const nowMs = Date.now();
                       const candleTime = Math.floor(nowMs / intervalMs) * intervalMs;
@@ -505,8 +511,8 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
           ws = { close: () => clearInterval(updateInterval) } as any;
           
       } else {
-          // Connect directly to Binance WebSocket
-let wsInterval = timeframe;
+          // Connect directly to Binance WebSocket for crypto
+          let wsInterval = timeframe;
           if (timeframe === "1m") wsInterval = "1m";
           else if (timeframe === "5m") wsInterval = "5m";
           else if (timeframe === "15m") wsInterval = "15m";
@@ -517,7 +523,7 @@ let wsInterval = timeframe;
           else if (timeframe === "1d") wsInterval = "1d";
           else wsInterval = "1m";
 
-          const wsUrl = `wss://stream.binance.com:9443/ws/${selectedSymbol.toLowerCase()}@kline_${wsInterval}`;
+          const wsUrl = `wss://stream.binance.com:9443/ws/${binanceWsSymbol}@kline_${wsInterval}`;
           ws = new WebSocket(wsUrl);
           
           ws.onmessage = (event) => {

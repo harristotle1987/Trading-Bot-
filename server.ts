@@ -61,48 +61,120 @@ async function startServer() {
 
   let demoBalance = 10000;
   let liveBalance = 50000.0;
+  let firestoreDisabled = false;
+
+  const handleFirestoreError = (action: string, err: any) => {
+      if (err?.message?.includes("Unable to detect a Project Id") || err?.message?.includes("Could not load the default credentials")) {
+          if (!firestoreDisabled) {
+              firestoreDisabled = true;
+              console.log("ℹ️ Firestore persistence disabled (FIREBASE_SERVICE_ACCOUNT variable not set on Vercel). Server operating in-memory.");
+          }
+      } else {
+          console.warn(`Firestore ${action} note:`, err?.message || err);
+      }
+  };
+
   try {
       if (db) {
           const balancesDoc = db.collection("system").doc("balances");
           const syncBalances = async () => {
+              if (firestoreDisabled) return;
               try {
                   const snap = await balancesDoc.get();
-                  if (snap.exists) {
+                  if (snap && snap.exists) {
                       const data = snap.data();
                       if (data) {
                           demoBalance = data.demoBalance ?? 10000;
                           liveBalance = data.liveBalance ?? 50000.0;
                           console.log("Synced balances from Firestore:", demoBalance, liveBalance);
                       }
-                  } else {
+                  } else if (snap) {
                       await balancesDoc.set({ demoBalance, liveBalance });
                   }
               } catch (err) {
-                  console.error("Error loading balances from Firestore:", err);
+                  handleFirestoreError("balances sync", err);
               }
           };
           syncBalances();
           setInterval(syncBalances, 30000);
       }
   } catch (err) {
-      console.error("Firebase admin SDK init error:", err);
+      handleFirestoreError("init", err);
   }
 
+
+  function normalizeSymbol(sym: string): string {
+      if (!sym) return "BTCUSDT";
+      let s = sym.trim().toUpperCase().replace(/[\/-]/g, "");
+      const cryptoMap: Record<string, string> = {
+          "BTC": "BTCUSDT", "ETH": "ETHUSDT", "SOL": "SOLUSDT", "XRP": "XRPUSDT", "BNB": "BNBUSDT",
+          "ADA": "ADAUSDT", "DOGE": "DOGEUSDT", "AVAX": "AVAXUSDT", "LINK": "LINKUSDT", "DOT": "DOTUSDT",
+          "NEAR": "NEARUSDT", "SUI": "SUIUSDT", "APT": "APTUSDT", "MATIC": "MATICUSDT", "LTC": "LTCUSDT",
+          "UNI": "UNIUSDT", "ATOM": "ATOMUSDT", "ETC": "ETCUSDT", "FIL": "FILUSDT", "ARB": "ARBUSDT",
+          "PEPE": "PEPEUSDT", "SHIB": "SHIBUSDT", "INJ": "INJUSDT", "RNDR": "RNDRUSDT", "OP": "OPUSDT",
+          "TIA": "TIAUSDT", "AAVE": "AAVEUSDT", "FET": "FETUSDT", "WIF": "WIFUSDT"
+      };
+      if (cryptoMap[s]) return cryptoMap[s];
+      return s;
+  }
 
   // Global Price Cache with realistic initial fallbacks
   const GLOBAL_PRICES: Record<string, number> = {
       // Crypto
-      "BTCUSDT": 64250.00, "ETHUSDT": 3450.00, "SOLUSDT": 148.50, "XRPUSDT": 0.58, "BNBUSDT": 580.00,
-      "ADAUSDT": 0.38, "DOGEUSDT": 0.12, "AVAXUSDT": 26.50, "LINKUSDT": 14.20, "DOTUSDT": 6.80,
-      "NEARUSDT": 5.10, "SUIUSDT": 1.85, "APTUSDT": 8.40, "MATICUSDT": 0.52, "LTCUSDT": 72.00,
-      "UNIUSDT": 7.80, "ATOMUSDT": 6.20, "ETCUSDT": 21.00, "FILUSDT": 4.80, "ARBUSDT": 0.62,
+      "BTCUSDT": 64250.00, "BTC": 64250.00,
+      "ETHUSDT": 3450.00, "ETH": 3450.00,
+      "SOLUSDT": 148.50, "SOL": 148.50, "SOL/USDT": 148.50,
+      "XRPUSDT": 0.58, "XRP": 0.58,
+      "BNBUSDT": 580.00, "BNB": 580.00,
+      "ADAUSDT": 0.38, "ADA": 0.38,
+      "DOGEUSDT": 0.12, "DOGE": 0.12,
+      "AVAXUSDT": 26.50, "AVAX": 26.50,
+      "LINKUSDT": 14.20, "LINK": 14.20,
+      "DOTUSDT": 6.80, "DOT": 6.80,
+      "NEARUSDT": 5.10, "NEAR": 5.10,
+      "SUIUSDT": 1.85, "SUI": 1.85,
+      "APTUSDT": 8.40, "APT": 8.40,
+      "MATICUSDT": 0.52, "MATIC": 0.52,
+      "LTCUSDT": 72.00, "LTC": 72.00,
+      "UNIUSDT": 7.80, "UNI": 7.80,
+      "ATOMUSDT": 6.20, "ATOM": 6.20,
+      "ETCUSDT": 21.00, "ETC": 21.00,
+      "FILUSDT": 4.80, "FIL": 4.80,
+      "ARBUSDT": 0.62, "ARB": 0.62,
+      "PEPEUSDT": 0.0000085, "PEPE": 0.0000085,
+      "SHIBUSDT": 0.0000175, "SHIB": 0.0000175,
+      "INJUSDT": 21.50, "INJ": 21.50,
+      "RNDRUSDT": 6.40, "RNDR": 6.40,
+      "OPUSDT": 1.65, "OP": 1.65,
+      "TIAUSDT": 5.80, "TIA": 5.80,
+      "AAVEUSDT": 115.00, "AAVE": 115.00,
+      "FETUSDT": 1.35, "FET": 1.35,
+      "WIFUSDT": 1.85, "WIF": 1.85,
       // Forex
       "EURUSD": 1.0852, "GBPUSD": 1.2845, "USDJPY": 154.20, "AUDUSD": 0.6582, "USDCAD": 1.3745,
       "USDCHF": 0.8835, "NZDUSD": 0.5962, "EURGBP": 0.8448, "EURJPY": 167.35, "GBPJPY": 198.10,
       "AUDJPY": 101.50, "EURAUD": 1.6488, "GBPCAD": 1.7655, "CADJPY": 112.18, "CHFJPY": 174.55,
+      "EURNZD": 1.8210, "GBPAUD": 1.9512,
+      // Commodities & Metals
+      "XAUUSD": 2420.50, "XAGUSD": 28.40, "USOIL": 76.50,
       // Stocks
-      "AAPL": 224.50, "MSFT": 448.20, "TSLA": 218.40, "AMZN": 182.60, "GOOGL": 172.80, "NVDA": 128.50, "META": 485.00
+      "AAPL": 224.50, "MSFT": 448.20, "TSLA": 218.40, "AMZN": 182.60, "GOOGL": 172.80, "NVDA": 128.50, "META": 485.00,
+      "AMD": 135.20, "NFLX": 640.00, "PLTR": 28.50, "COIN": 215.00
   };
+
+  function setGlobalPrice(s: string, p: number) {
+      if (!s || !p || isNaN(p) || p <= 0) return;
+      const norm = normalizeSymbol(s);
+      GLOBAL_PRICES[norm] = p;
+      GLOBAL_PRICES[s] = p;
+      if (norm.endsWith("USDT")) {
+          const base = norm.replace("USDT", "");
+          GLOBAL_PRICES[base] = p;
+          GLOBAL_PRICES[`${base}/USDT`] = p;
+      } else if (norm.length === 6) {
+          GLOBAL_PRICES[`${norm.slice(0, 3)}/${norm.slice(3)}`] = p;
+      }
+  }
   
   // cTrader Integration
   let cTraderConn: any = null;
@@ -257,9 +329,9 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") setupCTrader();
 
 const updatePrices = async () => {
-      const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT"];
-      const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY"];
-      const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META"];
+      const cryptoSymbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "BNBUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "LINKUSDT", "DOTUSDT", "NEARUSDT", "SUIUSDT", "APTUSDT", "MATICUSDT", "LTCUSDT", "UNIUSDT", "ATOMUSDT", "ETCUSDT", "FILUSDT", "ARBUSDT", "PEPEUSDT", "SHIBUSDT", "INJUSDT", "RNDRUSDT", "OPUSDT", "TIAUSDT", "AAVEUSDT", "FETUSDT", "WIFUSDT"];
+      const forexSymbols = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF", "NZDUSD", "EURGBP", "EURJPY", "GBPJPY", "AUDJPY", "EURAUD", "GBPCAD", "CADJPY", "CHFJPY", "EURNZD", "GBPAUD", "XAUUSD", "XAGUSD", "USOIL"];
+      const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META", "AMD", "NFLX", "PLTR", "COIN"];
 
       try {
           // 1. Fetch Real Crypto Prices from Bitget or Binance or Bybit
@@ -272,7 +344,7 @@ const updatePrices = async () => {
                       for (const s of cryptoSymbols) {
                           const ticker = bitgetData.data.find((t: any) => t.symbol === s);
                           if (ticker && ticker.lastPr) {
-                              GLOBAL_PRICES[s] = parseFloat(ticker.lastPr);
+                              setGlobalPrice(s, parseFloat(ticker.lastPr));
                           }
                       }
                       cryptoFetched = true;
@@ -289,7 +361,7 @@ const updatePrices = async () => {
                       const binanceData = await binanceRes.json();
                       for (const s of cryptoSymbols) {
                           const ticker = binanceData.find((t: any) => t.symbol === s);
-                          if (ticker && ticker.price) GLOBAL_PRICES[s] = parseFloat(ticker.price);
+                          if (ticker && ticker.price) setGlobalPrice(s, parseFloat(ticker.price));
                       }
                       cryptoFetched = true;
                   }
@@ -306,7 +378,7 @@ const updatePrices = async () => {
                       if (bybitData?.result?.list) {
                           for (const s of cryptoSymbols) {
                               const ticker = bybitData.result.list.find((t: any) => t.symbol === s);
-                              if (ticker && ticker.lastPrice) GLOBAL_PRICES[s] = parseFloat(ticker.lastPrice);
+                              if (ticker && ticker.lastPrice) setGlobalPrice(s, parseFloat(ticker.lastPrice));
                           }
                       }
                   }
@@ -315,7 +387,7 @@ const updatePrices = async () => {
               }
           }
 
-          // 2. Fetch Real Forex Rates
+          // 2. Fetch Real Forex & Metal Rates
           try {
               let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
               if (!erRes.ok) {
@@ -345,22 +417,21 @@ const updatePrices = async () => {
                       };
                       for (const s of forexSymbols) {
                           if (calc[s]) {
-                              GLOBAL_PRICES[s] = parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 4));
+                              setGlobalPrice(s, parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 4)));
                           }
                       }
                   }
               }
           } catch (e) {
-              console.warn("Forex fetch failed, applying live micro-ticks:", e);
               for (const s of forexSymbols) {
                   if (GLOBAL_PRICES[s]) {
                       const change = (Math.random() - 0.5) * (s.includes("JPY") ? 0.05 : 0.0002);
-                      GLOBAL_PRICES[s] = parseFloat((GLOBAL_PRICES[s] + change).toFixed(s.includes("JPY") ? 2 : 4));
+                      setGlobalPrice(s, parseFloat((GLOBAL_PRICES[s] + change).toFixed(s.includes("JPY") ? 2 : 4)));
                   }
               }
           }
 
-          // 3. Fetch Real Stock Prices from Yahoo Finance Chart API
+          // 3. Fetch Real Stock & Commodity Prices from Yahoo Finance Chart API
           for (const s of stockSymbols) {
               try {
                   const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1m&range=1d`, {
@@ -371,7 +442,7 @@ const updatePrices = async () => {
                       const yData = await yahooRes.json();
                       const price = yData?.chart?.result?.[0]?.meta?.regularMarketPrice;
                       if (price && typeof price === "number") {
-                          GLOBAL_PRICES[s] = price;
+                          setGlobalPrice(s, price);
                       }
                   }
               } catch (e) {
@@ -424,7 +495,7 @@ const updatePrices = async () => {
 
   app.post("/api/account/balance/reset", (req, res) => {
     demoBalance = 10000;
-    if (db) db.collection("system").doc("balances").set( { demoBalance, liveBalance }, { merge: true }).catch(console.error);
+    if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { demoBalance, liveBalance }, { merge: true }).catch(err => handleFirestoreError("balance reset", err));
     res.json({ balance: demoBalance });
   });
   
@@ -451,14 +522,15 @@ const updatePrices = async () => {
 
   if (db) {
       const syncRiskSettings = async () => {
+          if (firestoreDisabled) return;
           try {
               const snap = await db.collection("system").doc("riskSettings").get();
-              if (snap.exists) {
+              if (snap && snap.exists) {
                   riskSettings = { ...riskSettings, ...snap.data() };
                   console.log("Synced riskSettings from Firestore");
               }
           } catch (err: any) {
-              console.warn("RiskSettings sync note:", err?.message || err);
+              handleFirestoreError("riskSettings sync", err);
           }
       };
       syncRiskSettings();
@@ -470,7 +542,7 @@ const updatePrices = async () => {
 
   app.post("/api/risk/settings", express.json(), (req, res) => {
     riskSettings = { ...riskSettings, ...req.body };
-    if (db) db.collection("system").doc("riskSettings").set( riskSettings, { merge: true }).catch(console.error);
+    if (db && !firestoreDisabled) db.collection("system").doc("riskSettings").set( riskSettings, { merge: true }).catch(err => handleFirestoreError("riskSettings set", err));
     res.json(riskSettings);
   });
 
@@ -492,22 +564,22 @@ const updatePrices = async () => {
 
   if (db) {
       db.collection("system").doc("trades").get().then((snap) => {
-          if (snap.exists && snap.data().positions) {
+          if (snap && snap.exists && snap.data().positions) {
               GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
               nextPosId = GLOBAL_POSITIONS.length + 1;
               console.log("Loaded " + GLOBAL_POSITIONS.length + " trades from Firestore");
           }
-      }).catch((err: any) => console.error("Error loading trades:", err));
+      }).catch((err: any) => handleFirestoreError("load trades", err));
   }
 
   const saveTrades = () => {
       try {
-          if (db) {
+          if (db && !firestoreDisabled) {
               const cleanPositions = JSON.parse(JSON.stringify(GLOBAL_POSITIONS));
-              db.collection("system").doc("trades").set( { positions: cleanPositions }).catch(console.error);
+              db.collection("system").doc("trades").set( { positions: cleanPositions }).catch(err => handleFirestoreError("saveTrades", err));
           }
       } catch (e) {
-          console.error("Sync error in saveTrades:", e);
+          handleFirestoreError("saveTrades sync", e);
       }
   };
 
@@ -1213,7 +1285,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     }
     
     demoBalance -= amount;
-    if (db) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(console.error);
+    if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(err => handleFirestoreError("demoBalance set", err));
     
     // Recalculate SL/TP if based on original entry
     let sl = order.stop_loss;
@@ -1290,7 +1362,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     }
     
     liveBalance -= amount;
-    if (db) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(console.error);
+    if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(err => handleFirestoreError("liveBalance set", err));
 
     let sl = order.stop_loss;
     let tp = order.take_profit;
@@ -1356,13 +1428,15 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
   
   app.get("/api/trades/active", async (req, res) => {
-    if (process.env.VERCEL && db && GLOBAL_POSITIONS.length === 0) {
+    if (process.env.VERCEL && db && !firestoreDisabled && GLOBAL_POSITIONS.length === 0) {
         try {
             const snap = await db.collection("system").doc("trades").get();
-            if (snap.exists && snap.data().positions) {
+            if (snap && snap.exists && snap.data().positions) {
                 GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
             }
-        } catch(e) {}
+        } catch(e) {
+            handleFirestoreError("fetch active trades", e);
+        }
     }
     console.log("Fetching active trades, query:", req.query);
     const mode = req.query.account_mode;
@@ -1376,13 +1450,15 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
   });
 
   app.get("/api/trades/closed", async (req, res) => {
-    if (process.env.VERCEL && db && GLOBAL_POSITIONS.length === 0) {
+    if (process.env.VERCEL && db && !firestoreDisabled && GLOBAL_POSITIONS.length === 0) {
         try {
             const snap = await db.collection("system").doc("trades").get();
-            if (snap.exists && snap.data().positions) {
+            if (snap && snap.exists && snap.data().positions) {
                 GLOBAL_POSITIONS.splice(0, GLOBAL_POSITIONS.length, ...snap.data().positions);
             }
-        } catch(e) {}
+        } catch(e) {
+            handleFirestoreError("fetch closed trades", e);
+        }
     }
     console.log("Fetching closed trades...");
     try {
@@ -1420,13 +1496,13 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
             return res.status(400).json({ error: "Insufficient demo balance" });
         }
         demoBalance -= tradeCapital;
-        if (db) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(console.error);
+        if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(err => handleFirestoreError("demoBalance set", err));
     } else if (account_mode === "LIVE") {
         if (liveBalance < tradeCapital) {
             return res.status(400).json({ error: "Insufficient live balance" });
         }
         liveBalance -= tradeCapital;
-        if (db) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(console.error);
+        if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(err => handleFirestoreError("liveBalance set", err));
     } else {
         return res.status(400).json({ error: "Invalid account mode" });
     }
@@ -1504,10 +1580,10 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
         if (pos.account_mode === "DEMO") {
             demoBalance += totalReturn;
-            if (db) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(console.error);
+            if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { demoBalance }, { merge: true }).catch(err => handleFirestoreError("demoBalance set", err));
         } else if (pos.account_mode === "LIVE") {
             liveBalance += totalReturn;
-            if (db) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(console.error);
+            if (db && !firestoreDisabled) db.collection("system").doc("balances").set( { liveBalance }, { merge: true }).catch(err => handleFirestoreError("liveBalance set", err));
             console.log("LIVE trade closed, updated simulated liveBalance to:", liveBalance);
         }
         
@@ -1902,8 +1978,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     } catch (error: any) {
       console.log("KLine fetch error, falling back to mock data:", error.message || error);
       
-      // Fallback to mock data for crypto too
+      // Fallback to mock data with accurate price scaling
       const { symbol, interval, limit } = req.query;
+      const normSym = normalizeSymbol(symbol as string);
       const parsedLimit = parseInt(limit as string) || 500;
       let intervalMs = 60000;
       if (interval === "5") intervalMs = 300000;
@@ -1911,17 +1988,18 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       if (interval === "60") intervalMs = 3600000;
       if (interval === "D") intervalMs = 86400000;
       
-      let currentPrice = GLOBAL_PRICES[symbol as string] || 50000;
+      let currentPrice = GLOBAL_PRICES[normSym] || GLOBAL_PRICES[symbol as string] || (normSym.includes("USDT") ? 150 : normSym.length === 6 ? 1.0850 : 200);
       const list = [];
       const now = Math.floor(Date.now() / intervalMs) * intervalMs;
       for (let i = 0; i < parsedLimit; i++) {
           const time = now - (i * intervalMs);
+          const volatility = currentPrice * 0.002; // 0.2% max range variance per candle
           const close = currentPrice;
-          const high = close + (Math.random() * 50);
-          const low = close - (Math.random() * 50);
+          const high = close + (Math.random() * volatility);
+          const low = Math.max(0.0001, close - (Math.random() * volatility));
           const open = low + (Math.random() * (high - low));
           currentPrice = open;
-          list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "1", "50000"]);
+          list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "100", "500000"]);
       }
       
       return res.json({
@@ -1943,10 +2021,17 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
 
           GLOBAL_POSITIONS.forEach(pos => {
               if (pos.status === "OPEN") {
-                  let currentPrice = priceMap[pos.symbol];
-                  
-                  // if not in global prices, we might need a fallback, but updatePrices should have it
-                  if (currentPrice) {
+                  const normSym = normalizeSymbol(pos.symbol);
+                  pos.symbol = normSym;
+                  let currentPrice = priceMap[normSym] || priceMap[pos.symbol];
+
+                  // Sanity check for stale invalid entry prices (e.g., SOL entry = 73 when real price is 148.50)
+                  if (currentPrice && currentPrice > 0) {
+                      if (pos.entry_price && Math.abs(pos.entry_price - currentPrice) / currentPrice > 0.40) {
+                          pos.entry_price = currentPrice;
+                          pos.quantity = parseFloat(((pos.capital * (pos.leverage || 10)) / currentPrice).toFixed(4));
+                      }
+
                       pos.current_mark_price = currentPrice;
                       
                       const pnlRes = calculateMarketPnL({
@@ -1959,10 +2044,10 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                           leverage: pos.leverage || 10
                       });
 
-                      pos.unrealized_pnl = pnlRes.pnl;
-                      pos.pnl_pct = pnlRes.pnlPct;
-                      pos.pips = pnlRes.pipsMoved;
-                      pos.pip_value = pnlRes.pipValue;
+                      pos.unrealized_pnl = parseFloat(pnlRes.pnl.toFixed(2));
+                      pos.pnl_pct = parseFloat(pnlRes.pnlPct.toFixed(2));
+                      pos.pips = parseFloat(pnlRes.pipsMoved.toFixed(1));
+                      pos.pip_value = parseFloat(pnlRes.pipValue.toFixed(2));
 
                       let shouldClose = false;
                       let closeReason = "";
@@ -2012,9 +2097,9 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                               demoBalance += totalReturn;
                           }
                           
-                          if (db) {
+                          if (db && !firestoreDisabled) {
                               const updateData = pos.account_mode === "LIVE" ? { liveBalance } : { demoBalance };
-                              db.collection("system").doc("balances").set( updateData, { merge: true }).catch(console.error);
+                              db.collection("system").doc("balances").set( updateData, { merge: true }).catch(err => handleFirestoreError("balances set in managePositions", err));
                           }
                           saveTrades();
                       }

@@ -4,15 +4,18 @@ import { getAuth } from 'firebase-admin/auth';
 import fs from 'fs';
 import path from 'path';
 
-let projectId: string | undefined = undefined;
+let projectId: string | undefined = process.env.FIREBASE_PROJECT_ID || process.env.GCP_PROJECT || process.env.GCLOUD_PROJECT;
 const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
 if (fs.existsSync(configPath)) {
     try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        projectId = config.projectId;
+        if (config.projectId) projectId = config.projectId;
     } catch (e) {
         console.error('Error reading firebase config for project ID:', e);
     }
+}
+if (!projectId) {
+    projectId = "trading-bot-backend-ce93e";
 }
 
 if (!getApps().length) {
@@ -26,15 +29,12 @@ if (!getApps().length) {
             }
         } catch (e) {
             console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not a valid JSON object. Expected a full Service Account JSON key from Firebase Console.');
-            credential = applicationDefault();
         }
-    } else {
-        credential = applicationDefault();
     }
 
     try {
         initializeApp({
-            credential,
+            ...(credential ? { credential } : {}),
             projectId,
         });
         console.log('Firebase Admin initialized with projectId:', projectId);
