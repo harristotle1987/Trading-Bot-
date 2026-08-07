@@ -1,3 +1,4 @@
+CREATE SCHEMA IF NOT EXISTS auth;
 -- Unified Positions & Trades Table (Supports both DEMO and LIVE cTrader/Bybit accounts)
 CREATE TABLE IF NOT EXISTS positions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

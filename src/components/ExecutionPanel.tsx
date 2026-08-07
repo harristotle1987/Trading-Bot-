@@ -59,11 +59,15 @@ export default function ExecutionPanel() {
     try {
       const posRes = await fetch('/api/execution/positions', { headers: { 'Accept': 'application/json' } });
       const posData = await posRes.json();
-      if (posData.positions) setPositions(posData.positions);
+      if (posData.positions) {
+        setPositions(prev => JSON.stringify(prev) === JSON.stringify(posData.positions) ? prev : posData.positions);
+      }
 
       const ordRes = await fetch('/api/execution/orders', { headers: { 'Accept': 'application/json' } });
       const ordData = await ordRes.json();
-      if (ordData.orders) setOrders(ordData.orders);
+      if (ordData.orders) {
+        setOrders(prev => JSON.stringify(prev) === JSON.stringify(ordData.orders) ? prev : ordData.orders);
+      }
     } catch (err) {
       if (err instanceof TypeError) { console.warn("Execution API offline"); } else { console.error("Failed to fetch execution state", err); }
     }
@@ -197,16 +201,22 @@ export default function ExecutionPanel() {
             <tbody>
               {positions.length === 0 ? (
                 <tr><td colSpan={7} className="py-4 text-center text-[#838C9C] italic">No active positions</td></tr>
-              ) : positions.map((pos, idx) => (
+              ) : positions.map((pos, idx) => {
+                const markPrice = pos.current_mark_price || pos.mark_price || pos.entry_price || 0;
+                const size = pos.quantity || pos.size || 0;
+                const side = pos.side === 'BUY' || pos.side === 'LONG' ? 'LONG' : 'SHORT';
+                const pnl = pos.unrealized_pnl || 0;
+                const entry = pos.entry_price || 0;
+                return (
                 <tr key={idx} className="border-b border-[#1F2833] hover:bg-[#1F2833] transition-colors">
                   <td className="py-3 px-4 text-white font-bold">{pos.symbol}</td>
-                  <td className={`py-3 px-4 font-bold ${pos.side === 'LONG' ? 'text-[#00E676]' : 'text-[#FF1744]'}`}>{pos.side}</td>
-                  <td className="py-3 px-4 text-white">{pos.size}</td>
-                  <td className="py-3 px-4 text-white">${pos.entry_price.toFixed(2)}</td>
-                  <td className="py-3 px-4 text-white">${pos.mark_price.toFixed(2)}</td>
+                  <td className={`py-3 px-4 font-bold ${side === 'LONG' ? 'text-[#00E676]' : 'text-[#FF1744]'}`}>{side}</td>
+                  <td className="py-3 px-4 text-white">{typeof size === 'number' ? size.toFixed(4) : size}</td>
+                  <td className="py-3 px-4 text-white">${entry.toFixed(2)}</td>
+                  <td className="py-3 px-4 text-white">${markPrice.toFixed(2)}</td>
                   <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded font-bold ${pos.unrealized_pnl >= 0 ? 'bg-[#00E676] text-[#0B0C10]' : 'bg-[#FF1744] text-white'}`}>
-                        ${pos.unrealized_pnl.toFixed(2)}
+                      <span className={`px-2 py-1 rounded font-bold ${pnl >= 0 ? 'bg-[#00E676] text-[#0B0C10]' : 'bg-[#FF1744] text-white'}`}>
+                        ${pnl.toFixed(2)}
                       </span>
                   </td>
                   <td className="py-3 px-4 text-right">
@@ -219,7 +229,8 @@ export default function ExecutionPanel() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              );
+            })}
             </tbody>
           </table>
         </div>

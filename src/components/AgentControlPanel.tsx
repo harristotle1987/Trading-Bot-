@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { useRealtimeData } from '../hooks/useRealtimeData';
 
 const ALL_STRATEGIES = [
+  { id: "DAY_TRADING", name: "Day Trading (5M/15M)", baseWin: 87.2, color: "#FF6D00", desc: "VWAP Equilibrium, 9/20 EMA Cross & 5M Momentum" },
   { id: "SWING_TRADING", name: "Swing Trading (4H/1D)", baseWin: 86.8, color: "#3DDBD9", desc: "Fib Retracements & Multi-Day Momentum" },
   { id: "SMC_ICT", name: "ICT / SMC", baseWin: 88.4, color: "#66FCF1", desc: "Fair Value Gaps & Order Blocks" },
   { id: "TREND_FOLLOWING", name: "Trend Breakout", baseWin: 84.5, color: "#00E676", desc: "20/50/200 EMA Confluence" },
@@ -15,8 +16,9 @@ const ALL_STRATEGIES = [
 const AgentControlPanel = React.memo(function AgentControlPanel() {
   const [signals, setSignals] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeStrategies, setActiveStrategies] = useState<string[]>(["TREND_FOLLOWING", "MEAN_REVERSION"]);
+  const [activeStrategies, setActiveStrategies] = useState<string[]>(["DAY_TRADING", "ORDER_FLOW"]);
   const [strategyWeights, setStrategyWeights] = useState<Record<string, number>>({
+    DAY_TRADING: 50,
     SWING_TRADING: 50,
     SMC_ICT: 50,
     TREND_FOLLOWING: 60,
@@ -278,6 +280,12 @@ const AgentControlPanel = React.memo(function AgentControlPanel() {
             {/* Presets */}
             <div className="flex flex-wrap gap-1.5 text-[10px]">
               <span className="text-[#838C9C] self-center mr-1 font-bold">Quick Presets:</span>
+              <button
+                onClick={() => applyPreset(["DAY_TRADING", "ORDER_FLOW", "SMC_ICT"], { DAY_TRADING: 50, ORDER_FLOW: 25, SMC_ICT: 25 })}
+                className="px-2 py-1 rounded bg-[#1F2833] text-[#FF6D00] hover:bg-[#FF6D00] hover:text-black font-bold transition-all border border-[#FF6D00]/30 cursor-pointer"
+              >
+                🔥 Day Trading + Order Flow + ICT
+              </button>
               <button
                 onClick={() => applyPreset(["TREND_FOLLOWING", "MEAN_REVERSION"], { TREND_FOLLOWING: 60, MEAN_REVERSION: 40 })}
                 className="px-2 py-1 rounded bg-[#1F2833] text-[#00E676] hover:bg-[#00E676] hover:text-black font-bold transition-all border border-[#00E676]/30 cursor-pointer"

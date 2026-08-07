@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { useRealtimeData } from "../hooks/useRealtimeData";
+import { useLiveTrades } from "../hooks/useTradeState";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function AnalyticsDashboard() {
-  const { positions } = useRealtimeData('positions');
+  const { activeTrades: positions } = useLiveTrades();
   const activeTrades = positions.filter(p => p.status === 'OPEN');
   const closedTrades = positions.filter(p => p.status === 'CLOSED');
   const loading = false;
@@ -50,14 +50,14 @@ export default function AnalyticsDashboard() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
-              { title: "Net PnL (Closed + Active)", value: totalPnL >= 0 ? `+${totalPnL.toFixed(2)}` : `-${Math.abs(totalPnL).toFixed(2)}`, color: totalPnL >= 0 ? "text-[#00E676]" : "text-[#FF1744]" },
-              { title: "Realized PnL", value: totalClosedPnL >= 0 ? `+${totalClosedPnL.toFixed(2)}` : `-${Math.abs(totalClosedPnL).toFixed(2)}`, color: totalClosedPnL >= 0 ? "text-[#00E676]" : "text-[#FF1744]" },
+              { title: "Net PnL (Closed + Active)", value: totalPnL >= 0 ? `+$${totalPnL.toFixed(2)}` : `-$${Math.abs(totalPnL).toFixed(2)}`, color: totalPnL >= 0 ? "text-[#00E676]" : "text-[#FF1744]" },
+              { title: "Realized PnL", value: totalClosedPnL >= 0 ? `+$${totalClosedPnL.toFixed(2)}` : `-$${Math.abs(totalClosedPnL).toFixed(2)}`, color: totalClosedPnL >= 0 ? "text-[#00E676]" : "text-[#FF1744]" },
               { title: "Win Rate (Closed)", value: winRate, color: "text-white" },
-              { title: "Max Drawdown", value: `${maxDrawdown.toFixed(2)}`, color: "text-white" },
+              { title: "Max Drawdown", value: `$${maxDrawdown.toFixed(2)}`, color: "text-white" },
             ].map((stat, i) => (
               <div key={i} className="bg-[#12161D] border border-[#232833] p-4 rounded-lg">
                 <p className="text-[#838C9C] text-sm font-mono">{stat.title}</p>
-                <p className={`text-2xl font-bold mt-1 font-mono \${stat.color}`}>{stat.value}</p>
+                <p className={`text-2xl font-bold mt-1 font-mono ${stat.color}`}>{stat.value}</p>
               </div>
             ))}
           </div>
@@ -73,8 +73,8 @@ export default function AnalyticsDashboard() {
                     <YAxis stroke="#838C9C" tick={{fontSize: 12, fontFamily: 'monospace'}} />
                     <Tooltip 
                       contentStyle={{ backgroundColor: "#12161D", borderColor: "#232833", color: "#fff", fontFamily: 'monospace' }}
-                      formatter={(value: any) => [`${value}`, 'Running PnL']}
-                      labelFormatter={(label: any) => `Trade #\${label}`}
+                      formatter={(value: any) => [`$${value}`, 'Running PnL']}
+                      labelFormatter={(label: any) => `Trade #${label}`}
                     />
                     <Line type="stepAfter" dataKey="pnl" stroke="#3DDBD9" strokeWidth={2} dot={{ r: 4, fill: '#12161D', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#3DDBD9' }} />
                   </LineChart>

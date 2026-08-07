@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useRealtimeData } from "../hooks/useRealtimeData";
+import React, { useState } from "react";
+import { useClosedTrades } from "../hooks/useTradeState";
 import { toast } from "sonner";
 
 interface ClosedPosition {
@@ -19,8 +19,8 @@ interface ClosedPosition {
 }
 
 export default function ClosedTrades() {
-  const { positions } = useRealtimeData('positions');
-  const trades = positions.filter(p => p.status === 'CLOSED') as ClosedPosition[];
+  const { closedTrades } = useClosedTrades();
+  const trades = closedTrades as ClosedPosition[];
   const [isOpen, setIsOpen] = useState(false);
 
   const calculateDuration = (openedAt: string, closedAt: string) => {

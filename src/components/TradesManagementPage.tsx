@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { useRealtimeData } from "../hooks/useRealtimeData";
+import { mutate } from 'swr';
+import { useLiveTrades } from "../hooks/useTradeState";
 import { toast } from "sonner";
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot } from 'firebase/firestore';
@@ -31,20 +32,22 @@ interface Position {
 }
 
 export default function TradesManagementPage({ onNavigateToChart }: { onNavigateToChart?: (symbol: string) => void }) {
-  const [positions, setPositions] = useState<Position[]>([]);
   const [filterMode, setFilterMode] = useState<"ALL" | "DEMO" | "LIVE">("ALL");
-  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const { positions: globalPositions } = useRealtimeData('positions');
+  const { activeTrades: globalPositions, isLoading: isSwrLoading } = useLiveTrades();
 
-  useEffect(() => {
-      setPositions(globalPositions.filter(p => p.status === 'OPEN'));
-      setIsLoading(false);
+  const positions = React.useMemo(() => {
+    return (globalPositions || []).filter((p: Position) => p.status === 'OPEN');
   }, [globalPositions]);
 
-  const handleClosePosition = async (id: string, mode: "DEMO" | "LIVE") => {
+  const isLoading = isSwrLoading && positions.length === 0;
+
+    const handleClosePosition = async (id: string, mode: "DEMO" | "LIVE") => {
     console.log("Attempting to close position:", id, mode);
     try {
+      // Optimistic mutate activeTrades to remove this position
+      mutate('/api/trades/active', (current: any[]) => (current || []).filter(p => p.id !== id), false);
+
       const res = await fetch("/api/trades/close", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -58,15 +61,19 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
       const data = await res.json();
       console.log("Close response data:", data);
       if (res.ok) {
-          toast.success(`[${mode}] Trade Closed! Realized PnL: $${parseFloat(data.realized_pnl || 0).toFixed(2)}`);
-          window.dispatchEvent(new CustomEvent("trade_updated"));
-          window.dispatchEvent(new Event("balance_updated"));
+          toast.success(`[${mode}] Trade Closed! Realized PnL: ${parseFloat(data.realized_pnl || 0).toFixed(2)}`);
+          mutate('/api/trades/active');
+          mutate('/api/account/balances');
       } else {
           toast.error(`Failed to close position: ${data.message || data.error}`);
+          mutate('/api/trades/active');
+          mutate('/api/account/balances');
       }
     } catch (err: any) {
       toast.error(`Failed to close position: ${err.message}`);
       console.error("Failed to close position:", err);
+      mutate('/api/trades/active');
+      mutate('/api/account/balances');
     }
   };
 

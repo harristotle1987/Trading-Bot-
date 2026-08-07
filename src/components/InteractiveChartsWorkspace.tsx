@@ -1,4 +1,5 @@
 import { useRealtimeData } from "../hooks/useRealtimeData";
+import { useLiveTrades } from "../hooks/useTradeState";
 import React, { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, IPriceLine } from "lightweight-charts";
@@ -24,6 +25,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   const [selectedSymbol, setSelectedSymbol] = useState<string>(initialSymbol || "BTCUSDT");
   const [selectedStrategies, setSelectedStrategies] = useState<string[]>(["SWING_TRADING", "SMC_ICT"]);
   const [showSwingResearch, setShowSwingResearch] = useState<boolean>(false);
+  const [showDayResearch, setShowDayResearch] = useState<boolean>(false);
   const [timeframe, setTimeframe] = useState("4h");
   const [activeMode, setActiveMode] = useState<"DEMO" | "LIVE">("DEMO");
   const [recommendations, setRecommendations] = useState<RecommendedPair[]>([]);
@@ -83,7 +85,8 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
     }
   };
 
-  const { positions, prices } = useRealtimeData();
+  const { prices } = useRealtimeData('prices');
+  const { activeTrades: positions } = useLiveTrades();
   globalPricesForChart = prices;
 
   useEffect(() => {
@@ -651,12 +654,18 @@ let wsInterval = timeframe;
           </div>
 
           {/* Controls Bar */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
+          <div className="flex items-center gap-2 flex-wrap md:flex-nowrap w-full md:w-auto justify-between md:justify-end">
+            <button
+              onClick={() => setShowDayResearch(!showDayResearch)}
+              className="px-3 py-1.5 bg-[#1F2833] hover:bg-[#FF6D00] hover:text-[#0B0C10] text-[#FF6D00] text-xs font-bold font-mono rounded border border-[#FF6D00]/40 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              🔥 DAY TRADING RESEARCH & PLAYBOOK
+            </button>
             <button
               onClick={() => setShowSwingResearch(!showSwingResearch)}
-              className="px-3 py-1.5 bg-[#1F2833] hover:bg-[#3DDBD9] hover:text-[#0B0C10] text-[#3DDBD9] text-xs font-bold font-mono rounded border border-[#3DDBD9]/40 transition-all flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-[#1F2833] hover:bg-[#3DDBD9] hover:text-[#0B0C10] text-[#3DDBD9] text-xs font-bold font-mono rounded border border-[#3DDBD9]/40 transition-all flex items-center gap-1.5 cursor-pointer"
             >
-              📖 SWING TRADING RESEARCH & PLAYBOOK
+              📖 SWING TRADING PLAYBOOK
             </button>
 
             {/* Mode Switcher */}
@@ -683,7 +692,7 @@ let wsInterval = timeframe;
             <button
               onClick={() => triggerAgentScan()}
               disabled={isScanning}
-              className="px-4 py-2 bg-[#FFD600] text-[#0B0C10] text-xs font-bold font-mono rounded hover:bg-yellow-400 transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(255,214,0,0.3)]"
+              className="px-4 py-2 bg-[#FFD600] text-[#0B0C10] text-xs font-bold font-mono rounded hover:bg-yellow-400 transition-all flex items-center gap-2 shadow-[0_0_10px_rgba(255,214,0,0.3)] cursor-pointer"
             >
               {isScanning ? "SCANNING..." : "⚡ RUN AGENT FORENSICS"}
             </button>
@@ -708,41 +717,42 @@ let wsInterval = timeframe;
               <span className="text-gray-400">Quick Combinations:</span>
               <button
                 onClick={() => {
+                  const combo = ["DAY_TRADING", "ORDER_FLOW", "SMC_ICT"];
+                  setSelectedStrategies(combo);
+                  setTimeframe("15m");
+                  triggerAgentScan(combo);
+                }}
+                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#FF6D00] hover:bg-[#FF6D00] hover:text-[#0B0C10] transition-all font-bold cursor-pointer"
+              >
+                🔥 Day Trading + Order Flow (15M)
+              </button>
+              <button
+                onClick={() => {
                   const combo = ["SWING_TRADING", "SMC_ICT"];
                   setSelectedStrategies(combo);
                   setTimeframe("4h");
                   triggerAgentScan(combo);
                 }}
-                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#3DDBD9] hover:bg-[#3DDBD9] hover:text-[#0B0C10] transition-all font-bold"
+                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#3DDBD9] hover:bg-[#3DDBD9] hover:text-[#0B0C10] transition-all font-bold cursor-pointer"
               >
                 🌊 Swing + ICT/SMC (4H)
               </button>
               <button
                 onClick={() => {
-                  const combo = ["SWING_TRADING", "SMC_ICT", "ORDER_FLOW"];
-                  setSelectedStrategies(combo);
-                  setTimeframe("4h");
-                  triggerAgentScan(combo);
-                }}
-                className="px-2 py-0.5 rounded bg-[#1F2833] text-[#FFD600] hover:bg-[#FFD600] hover:text-[#0B0C10] transition-all font-bold"
-              >
-                📊 Swing + ICT + Order Flow
-              </button>
-              <button
-                onClick={() => {
-                  const combo = ["SWING_TRADING", "SMC_ICT", "MEAN_REVERSION", "ORDER_FLOW", "TREND_FOLLOWING", "GRID_TRADING"];
+                  const combo = ["DAY_TRADING", "SWING_TRADING", "SMC_ICT", "MEAN_REVERSION", "ORDER_FLOW", "TREND_FOLLOWING", "GRID_TRADING"];
                   setSelectedStrategies(combo);
                   triggerAgentScan(combo);
                 }}
-                className="px-2 py-0.5 rounded bg-gradient-to-r from-teal-500 to-yellow-400 text-[#0B0C10] hover:opacity-90 transition-all font-bold"
+                className="px-2 py-0.5 rounded bg-gradient-to-r from-orange-500 via-teal-500 to-yellow-400 text-[#0B0C10] hover:opacity-90 transition-all font-bold cursor-pointer"
               >
-                ⚡ MAX CONFLUENCE (ALL 6)
+                ⚡ MAX CONFLUENCE (ALL 7)
               </button>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-1.5 text-xs w-full">
             {[
+              { id: "DAY_TRADING", name: "🔥 Day Trading (5M/15M)", desc: "VWAP Equilibrium & 9/20 EMA Breakouts" },
               { id: "SWING_TRADING", name: "🌊 Swing Trading (4H/1D)", desc: "Fib Retracements & Multi-Day Momentum" },
               { id: "SMC_ICT", name: "⚡ ICT / SMC", desc: "Fair Value Gaps & Order Blocks" },
               { id: "MEAN_REVERSION", name: "🔄 Mean Reversion", desc: "Bollinger & VWAP Overextension" },
@@ -783,6 +793,85 @@ let wsInterval = timeframe;
           </div>
         </div>
       </header>
+
+      {/* Day Trading Detailed Research Playbook Modal */}
+      {showDayResearch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="bg-[#12161D] border-2 border-[#FF6D00] rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto font-mono text-sm space-y-5 shadow-[0_0_30px_rgba(255,109,0,0.25)]">
+            <div className="flex justify-between items-center border-b border-[#232833] pb-3">
+              <div>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>🔥 DAY TRADING STRATEGY & INTRADAY PLAYBOOK</span>
+                </h2>
+                <p className="text-xs text-[#FF6D00] mt-0.5">Comprehensive Intraday Guide, Strategy Mechanics & Best Practices</p>
+              </div>
+              <button
+                onClick={() => setShowDayResearch(false)}
+                className="text-[#838C9C] hover:text-white font-bold px-2 py-1 bg-[#1F2833] rounded cursor-pointer"
+              >
+                ✕ CLOSE
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs leading-relaxed text-[#E6E9EF]">
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#FFD600] uppercase mb-2">1. What is Day Trading?</h3>
+                <p>
+                  Day trading is the high-frequency practice of executing positions strictly within the <strong>same trading day</strong>. All trades are closed before session end to eliminate overnight gap exposure. Day traders use <strong>5-Minute (5M) and 15-Minute (15M) timeframes</strong> to exploit short-term momentum, volatility spikes, and intraday mean reversions.
+                </p>
+              </section>
+
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#FF6D00] uppercase mb-2">2. Core Intraday Day Trading Strategies</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">A. VWAP (Volume-Weighted Average Price) Pullback</strong>
+                    <p className="text-gray-400">VWAP represents the intraday fair value benchmark. Traders buy when price retests VWAP from above with volume surge, treating VWAP as dynamic intraday support.</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">B. 9/20 EMA Exponential Crossover</strong>
+                    <p className="text-gray-400">Fast 9-period EMA crossing above 20-period EMA on 5M/15M charts signals intense directional velocity, confirming high-momentum breakouts.</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">C. Opening Range Breakout (ORB)</strong>
+                    <p className="text-gray-400">Monitors the high and low of the initial 15-30 minutes of trading. Positions enter when price decisively breaks out with order book bid/ask delta imbalance.</p>
+                  </div>
+                  <div className="p-3 bg-[#12161D] rounded border border-[#1F2833]">
+                    <strong className="text-white block mb-1">D. RSI Momentum & MACD Confluence</strong>
+                    <p className="text-gray-400">5M RSI bouncing off 45 support combined with MACD histogram bullish flip confirms strong trend continuation on low-risk intraday pullbacks.</p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-[#0B0E13] p-4 rounded-lg border border-[#232833]">
+                <h3 className="text-sm font-bold text-[#00E676] uppercase mb-2">3. Intraday Risk Management & Execution Rules</h3>
+                <ul className="list-disc list-inside space-y-1.5 text-gray-300">
+                  <li><strong>Minimum 1:2.0 Risk-to-Reward Ratio:</strong> Intraday target profits must exceed at least 2.0x potential stop loss distance.</li>
+                  <li><strong>Tight ATR Trailing Stop Losses:</strong> Place stops behind recent 5M pivot highs/lows or 1.5x ATR to contain drawdowns.</li>
+                  <li><strong>Strict 1% Account Risk Limit:</strong> Never risk more than 1% of total account balance on any single day trade.</li>
+                  <li><strong>Zero Overnight Risk:</strong> Liquidate all positions prior to daily market close regardless of current floating PnL.</li>
+                  <li><strong>Multi-Timeframe Context:</strong> Use 15M chart for macro intraday directional bias and 5M chart for precise entry timing.</li>
+                </ul>
+              </section>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setSelectedStrategies(["DAY_TRADING"]);
+                    setTimeframe("15m");
+                    triggerAgentScan(["DAY_TRADING"]);
+                    setShowDayResearch(false);
+                    toast.success("Applied Day Trading Strategy & 15M Timeframe!");
+                  }}
+                  className="px-5 py-2.5 bg-[#FF6D00] text-black font-bold rounded hover:bg-[#E66200] transition-all cursor-pointer"
+                >
+                  ⚡ APPLY DAY TRADING MODEL NOW
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Swing Trading Detailed Research Playbook Modal */}
       {showSwingResearch && (

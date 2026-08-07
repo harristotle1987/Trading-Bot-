@@ -1,4 +1,6 @@
+import { mutate } from 'swr';
 import React, { useState, useEffect } from "react";
+import { useAccountBalance } from "../hooks/useTradeState";
 
 interface WalletMetrics {
   total_equity: number;
@@ -10,13 +12,7 @@ interface WalletMetrics {
 export default function TopNavbar() {
   const [activeMode, setActiveMode] = useState<"DEMO" | "LIVE">("DEMO");
   const [needsAuth, setNeedsAuth] = useState(false);
-  const [balances, setBalances] = useState<{
-    demo: WalletMetrics;
-    live: WalletMetrics;
-  }>({
-    demo: { total_equity: 10000.0, available_balance: 10000.0, currency: "USDT", status: "ONLINE" },
-    live: { total_equity: 0.0, available_balance: 0.0, currency: "USDT", status: "OFFLINE" },
-  });
+  const { balances } = useAccountBalance();
 
   const checkAuthStatus = async () => {
     try {
@@ -30,27 +26,15 @@ export default function TopNavbar() {
     }
   };
 
-  const fetchBalances = async () => {
-    try {
-      const res = await fetch("/api/account/balances", { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setBalances(data);
-      }
-    } catch (err) {
-      console.warn("Failed to fetch wallet balances:", err);
-    }
-  };
+  
 
   useEffect(() => {
-    fetchBalances();
-    checkAuthStatus();
-    const interval = setInterval(() => {
-        fetchBalances();
         checkAuthStatus();
+    const interval = setInterval(() => {
+                checkAuthStatus();
     }, 5000); // Auto refresh cash balances every 5s
     
-    const handleBalanceUpdated = () => fetchBalances();
+    const handleBalanceUpdated = () => mutate('/api/account/balances');
     window.addEventListener("balance_updated", handleBalanceUpdated);
 
     // Listen for OAuth success message from popup
@@ -58,7 +42,7 @@ export default function TopNavbar() {
         if (event.data?.type === 'CTRADER_OAUTH_SUCCESS') {
             setNeedsAuth(false);
             // Give server a moment to reconnect, then fetch balances
-            setTimeout(fetchBalances, 2000);
+            setTimeout(() => mutate('/api/account/balances'), 2000);
         }
     };
     window.addEventListener('message', handleMessage);

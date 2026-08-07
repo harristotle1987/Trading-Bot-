@@ -4,7 +4,7 @@ import { Sparkles, TrendingUp, TrendingDown, RefreshCw, Search, CheckCircle2, Sh
 import { useRealtimeData } from "../hooks/useRealtimeData";
 import { TRADABLE_PAIRS } from "../App";
 
-export type TradingStrategy = "SWING_TRADING" | "SMC_ICT" | "MEAN_REVERSION" | "ORDER_FLOW" | "GRID_TRADING" | "TREND_FOLLOWING" | "CUSTOM_DOC";
+export type TradingStrategy = "DAY_TRADING" | "SWING_TRADING" | "SMC_ICT" | "MEAN_REVERSION" | "ORDER_FLOW" | "GRID_TRADING" | "TREND_FOLLOWING" | "CUSTOM_DOC";
 
 export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMode }: { activeSymbol: string, accountMode: "DEMO" | "LIVE" }) {
     const [isOpen, setIsOpen] = useState(false);
@@ -232,8 +232,9 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol, accountMo
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-1.5 text-[11px] font-mono">
+                    <div className="grid grid-cols-4 gap-1.5 text-[11px] font-mono">
                         {[
+                            { id: "DAY_TRADING", label: "Day Trading", desc: "VWAP & 9/20 EMA" },
                             { id: "SWING_TRADING", label: "Swing Trading", desc: "4H/1D Fib & Struct" },
                             { id: "SMC_ICT", label: "ICT / SMC", desc: "FVG & Order Blocks" },
                             { id: "MEAN_REVERSION", label: "Mean Reversion", desc: "Bollinger & VWAP" },

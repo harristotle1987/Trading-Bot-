@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { mutate } from 'swr';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { calculatePositionTrajectory } from '../utils/tradeMath';
 import { TRADABLE_PAIRS } from '../App';
 import { useRealtimeData } from '../hooks/useRealtimeData';
@@ -32,10 +33,38 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
   const [sentimentScore, setSentimentScore] = useState<number | null>(null);
   const [sentimentLoading, setSentimentLoading] = useState(true);
 
-  const handleExecuteSignal = async (s: TradeSignal) => {
+    const handleExecuteSignal = async (s: TradeSignal) => {
     setExecutingSymbol(s.symbol);
     try {
       const livePrice = prices[s.symbol] || s.entryPrice || 100;
+      
+      // Optimistic mutation
+      const optimisticPosition = {
+        id: Math.random().toString(),
+        symbol: s.symbol,
+        side: s.type === "UP" ? "BUY" : "SELL",
+        status: 'OPEN',
+        entry_price: livePrice,
+        unrealized_pnl: 0,
+        margin_allocated: allocation,
+        leverage: leverage,
+        take_profit: s.tpPrice,
+        stop_loss: s.slPrice,
+        account_mode: "DEMO"
+      };
+
+      mutate('/api/trades/active', (currentData: any = []) => [...currentData, optimisticPosition], false);
+      mutate('/api/account/balances', (currentData: any) => {
+        if (!currentData || !currentData.demo) return currentData;
+        return {
+            ...currentData,
+            demo: {
+                ...currentData.demo,
+                available_balance: currentData.demo.available_balance - allocation
+            }
+        };
+      }, false);
+
       const res = await fetch("/api/trades/execute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -52,15 +81,21 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
         })
       });
       if (res.ok) {
-        toast.success(`Trade Executed for ${s.symbol} at live market price ($${livePrice})!`);
-        window.dispatchEvent(new CustomEvent("trade_updated"));
-        window.dispatchEvent(new Event("balance_updated"));
+        toast.success(`Trade Executed for ${s.symbol} at live market price (${livePrice})!`);
+        // Invalidate to fetch real data
+        mutate('/api/trades/active');
+        mutate('/api/account/balances');
       } else {
         const data = await res.json();
         toast.error(`Trade failed: ${data.error || data.message}`);
+        // Rollback
+        mutate('/api/trades/active');
+        mutate('/api/account/balances');
       }
     } catch(err: any) {
       toast.error(`Execution error: ${err.message}`);
+      mutate('/api/trades/active');
+      mutate('/api/account/balances');
     } finally {
       setExecutingSymbol(null);
     }
@@ -204,8 +239,8 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
          ) : (
            <div className="flex justify-between items-center">
              <div className="text-white text-sm font-bold">{selectedSymbol}</div>
-             <div className={`text-xs font-bold ${sentimentScore !== null && sentimentScore > 0 ? 'text-[#00E676]' : sentimentScore !== null && sentimentScore < 0 ? 'text-[#FF1744]' : 'text-white'}`}>
-               {sentimentScore !== null ? `Score: ${sentimentScore > 0 ? '+' : ''}${sentimentScore.toFixed(2)}` : 'N/A'}
+             <div className={`text-xs font-bold ${sentimentScore != null && sentimentScore > 0 ? 'text-[#00E676]' : sentimentScore != null && sentimentScore < 0 ? 'text-[#FF1744]' : 'text-white'}`}>
+               {sentimentScore != null ? `Score: ${sentimentScore > 0 ? '+' : ''}${sentimentScore.toFixed(2)}` : 'N/A'}
              </div>
            </div>
          )}
@@ -225,14 +260,14 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
               const pairInfo = TRADABLE_PAIRS.find(p => p.symbol === s.symbol);
               const category = pairInfo?.category === 'forex' ? 'forex' : 'crypto';
               
-              const calc = useMemo(() => calculatePositionTrajectory(
+              const calc = calculatePositionTrajectory(
                 allocation,
                 leverage,
                 s.entryPrice,
                 s.slPrice || s.entryPrice * 0.99,
                 s.tpPrice || s.entryPrice * 1.02,
                 category
-              ), [allocation, leverage, s.entryPrice, s.slPrice, s.tpPrice, category]);
+              );
 
               const livePrice = prices[s.symbol] || s.entryPrice;
 

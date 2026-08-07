@@ -55,7 +55,7 @@ const fetchActivePositions = async () => {
             }
         }
     } catch (e) {
-        console.warn('Failed to fetch active positions:', e);
+        // Silently retain current positions on transient network drop during dev server restart
     }
 };
 

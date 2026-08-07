@@ -50,7 +50,7 @@ export default function NewsSentimentTerminal() {
           <div className="relative w-48 h-48 flex items-center justify-center">
              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
                 <circle cx="50" cy="50" r="40" fill="transparent" stroke="#1F2833" strokeWidth="8" />
-                {sentiment && (
+                {sentiment && typeof sentiment.score === "number" && (
                   <circle 
                     cx="50" cy="50" r="40" fill="transparent" 
                     stroke={sentiment.score >= 0 ? "#00E676" : "#FF1744"} 
@@ -60,8 +60,8 @@ export default function NewsSentimentTerminal() {
                 )}
              </svg>
              <div className="absolute flex flex-col items-center justify-center">
-                <span className={`text-4xl font-bold ${sentiment ? getSentimentColor(sentiment.score) : "text-[#838C9C]"}`}>
-                  {sentiment ? (sentiment.score > 0 ? '+' : '') + sentiment.score.toFixed(2) : "0.00"}
+                <span className={`text-4xl font-bold ${sentiment && typeof sentiment.score === "number" ? getSentimentColor(sentiment.score) : "text-[#838C9C]"}`}>
+                  {sentiment && typeof sentiment.score === "number" ? (sentiment.score > 0 ? '+' : '') + sentiment.score.toFixed(2) : "0.00"}
                 </span>
                 <span className="text-sm font-semibold uppercase text-[#838C9C] mt-2">
                   {sentiment ? sentiment.label : "NEUTRAL"}

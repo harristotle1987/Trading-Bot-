@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { mutate } from 'swr';
 import { toast } from 'sonner';
 
 export default function RiskSettings() {
@@ -160,6 +161,7 @@ export default function RiskSettings() {
                 onClick={async () => {
                   const res = await fetch('/api/account/balance/reset', { method: 'POST' });
                   if (res.ok) {
+                    mutate('/api/account/balances');
                     setMessage('Balance reset to $10,000');
                     setTimeout(() => setMessage(''), 3000);
                   }
