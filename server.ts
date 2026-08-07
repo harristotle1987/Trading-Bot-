@@ -2229,11 +2229,12 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       } catch (err) {
           console.error("Auto-trade engine error:", err);
       }
-      agentState.current_activity = "SEARCHING";
-      
+      if (agentState.status === "RUNNING") {
+          agentState.current_activity = "SEARCHING";
+      } else {
+          agentState.current_activity = agentState.status;
+      }
   };
-
-  
 
   const runTick = async () => {
       try {
@@ -2241,6 +2242,8 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
           await managePositionsEngine();
           if (agentState.status === "RUNNING") {
               await runAutoTrade();
+          } else {
+              agentState.current_activity = agentState.status;
           }
           if (pusher) {
               pusher.trigger("trading-bot", "market-update", { prices: GLOBAL_PRICES });

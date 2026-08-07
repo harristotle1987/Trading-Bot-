@@ -148,7 +148,7 @@ export default function App() {
 
   return (
     <div className="bg-[#0B0E13] text-[#E6E9EF] overflow-hidden flex flex-col md:flex-row h-[100dvh] relative font-sans">
-      <Toaster position="bottom-right" theme="dark" />
+      <Toaster position="top-right" theme="dark" closeButton duration={3500} toastOptions={{ style: { background: '#12161D', color: '#E6E9EF', border: '1px solid #232833' } }} />
       <HistoricalTradesModal />
       {/* Pulse Strip */}
       <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-transparent via-[#3DDBD9] to-transparent opacity-80 animate-pulse z-50"></div>

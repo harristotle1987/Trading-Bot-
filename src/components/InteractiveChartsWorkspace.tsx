@@ -54,19 +54,19 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
     const strats = overrideStrategies || selectedStrategies;
     const stratParam = strats.join(",");
     setIsScanning(true);
-    toast(`Initiating AI agent scan combining [${strats.length > 1 ? strats.length + ' Strategies' : strats[0]}]...`);
+    const toastId = toast.loading(`Initiating AI agent scan combining [${strats.length > 1 ? strats.length + ' Strategies' : strats[0]}]...`);
     try {
       const res = await fetch(`/api/agent-workspace/scan?mode=${activeMode}&strategy=${encodeURIComponent(stratParam)}`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (res.ok) {
         setRecommendations(data.recommended_pairs || []);
-        toast.success(`Agent scan complete [${strats.length > 1 ? 'Multi-Strategy Confluence: ' + strats.join(' + ') : strats[0]}]`);
+        toast.success(`Agent scan complete [${strats.length > 1 ? 'Multi-Strategy Confluence: ' + strats.join(' + ') : strats[0]}]`, { id: toastId });
       } else {
-        toast.error("Failed to run agent scan");
+        toast.error("Failed to run agent scan", { id: toastId });
       }
     } catch (err: any) {
-      toast.error(`Agent scan error: ${err.message}`);
+      toast.error(`Agent scan error: ${err.message}`, { id: toastId });
       console.error("Failed to run agent scan:", err);
     } finally {
       setIsScanning(false);
