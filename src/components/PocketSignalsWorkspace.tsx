@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { TRADABLE_PAIRS } from '../App';
 import { useRealtimeData } from '../hooks/useRealtimeData';
 import { TRADING_STRATEGIES, ALL_TIMEFRAMES, StrategyConfig } from '../data/strategies';
+import { getPriceForSymbol, formatSmartPrice } from '../utils/priceUtils';
 
 export interface PocketSignal {
   id: string;
@@ -222,14 +223,23 @@ export default function PocketSignalsWorkspace({
         return prevSignals.map(sig => {
           if (sig.status !== 'ACTIVE') return sig;
 
-          // Find live market price tick
-          const cleanSym = sig.symbol.replace(/[^a-zA-Z]/g, '').toUpperCase();
-          let liveP = prices[cleanSym] || sig.currentPrice;
+          // Find live market price safely
+          const basePrice = getPriceForSymbol(prices, sig.symbol) || sig.entryPrice;
+          
+          // Micro deterministic sine oscillation (±0.015%) relative to entry price so it stays rock solid
+          const microFactor = 1 + (Math.sin(now / 2000 + (sig.entryPrice * 10)) * 0.00012);
+          let liveP = basePrice * microFactor;
 
-          // Add subtle micro tick fluctuation if static
-          if (typeof liveP === 'number') {
-            const jitter = (Math.random() - 0.49) * (cleanSym.includes('USD') && !cleanSym.includes('USDT') ? 0.00008 : 0.4);
-            liveP = parseFloat((liveP + jitter).toFixed(cleanSym.length === 6 ? 5 : 2));
+          const isForex = sig.category === 'forex' || sig.symbol.includes('USD') && !sig.symbol.includes('USDT');
+          const isJpy = sig.symbol.includes('JPY');
+          if (isForex && !isJpy) {
+            liveP = parseFloat(liveP.toFixed(5));
+          } else if (isJpy) {
+            liveP = parseFloat(liveP.toFixed(3));
+          } else if (liveP < 1) {
+            liveP = parseFloat(liveP.toFixed(4));
+          } else {
+            liveP = parseFloat(liveP.toFixed(2));
           }
 
           // Check if expired
@@ -274,9 +284,8 @@ export default function PocketSignalsWorkspace({
       if (activeCount < 6) {
         // Spawn fresh signal
         const randomPair = POCKET_OPTION_PAIRS[Math.floor(Math.random() * POCKET_OPTION_PAIRS.length)];
-        const cleanSym = randomPair.symbol.replace('-OTC', '');
         const durationMs = ALL_TIMEFRAMES.find(t => t.id === selectedTimeframe)?.durationMs || 60000;
-        const livePrice = prices[cleanSym] || (cleanSym.length === 6 ? 1.0850 : 64000);
+        const livePrice = getPriceForSymbol(prices, randomPair.symbol);
 
         const newSig: PocketSignal = {
           id: `POCKET-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -285,8 +294,8 @@ export default function PocketSignalsWorkspace({
           category: randomPair.category as any,
           direction: Math.random() > 0.48 ? 'CALL' : 'PUT',
           expiry: selectedTimeframe,
-          entryPrice: typeof livePrice === 'number' ? parseFloat(livePrice.toFixed(5)) : 1.0850,
-          currentPrice: typeof livePrice === 'number' ? parseFloat(livePrice.toFixed(5)) : 1.0850,
+          entryPrice: livePrice,
+          currentPrice: livePrice,
           winRate: Math.floor(Math.random() * 7) + 89,
           payoutPct: randomPair.payout,
           confidence: 'ULTRA_ACCURATE',
@@ -310,7 +319,6 @@ export default function PocketSignalsWorkspace({
     setScanningPair(pairObj.symbol);
     const toastId = toast.loading(`Scanning ${pairObj.label} using ${selectedStrategyConfig.name}...`);
     try {
-      const cleanSym = pairObj.symbol.replace('-OTC', '');
       let newSig: PocketSignal | null = null;
 
       try {
@@ -318,7 +326,7 @@ export default function PocketSignalsWorkspace({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            symbol: cleanSym, 
+            symbol: pairObj.symbol, 
             isOtc: pairObj.isOtc,
             strategyName: selectedStrategyConfig.name,
             timeframe: selectedTimeframe
@@ -333,7 +341,7 @@ export default function PocketSignalsWorkspace({
 
       if (!newSig) {
         const durationMs = ALL_TIMEFRAMES.find(t => t.id === selectedTimeframe)?.durationMs || 60000;
-        const livePrice = prices[cleanSym] || (cleanSym.length === 6 ? 1.0850 : 64000);
+        const livePrice = getPriceForSymbol(prices, pairObj.symbol);
         newSig = {
           id: `POCKET-${Math.floor(1000 + Math.random() * 9000)}`,
           symbol: pairObj.label,
@@ -341,8 +349,8 @@ export default function PocketSignalsWorkspace({
           category: pairObj.category as any,
           direction: Math.random() > 0.45 ? 'CALL' : 'PUT',
           expiry: selectedTimeframe,
-          entryPrice: typeof livePrice === 'number' ? parseFloat(livePrice.toFixed(5)) : 1.0850,
-          currentPrice: typeof livePrice === 'number' ? parseFloat(livePrice.toFixed(5)) : 1.0850,
+          entryPrice: livePrice,
+          currentPrice: livePrice,
           winRate: Math.floor(Math.random() * 6) + 90,
           payoutPct: pairObj.payout,
           confidence: 'ULTRA_ACCURATE',

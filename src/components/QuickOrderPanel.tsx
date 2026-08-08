@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Sparkles, TrendingUp, TrendingDown, RefreshCw, Search, CheckCircle2, Copy, Zap, X, FileText, Clock, ExternalLink } from 'lucide-react';
 import { useRealtimeData } from "../hooks/useRealtimeData";
 import { TRADABLE_PAIRS } from "../App";
+import { getPriceForSymbol } from "../utils/priceUtils";
 
 export type TradingStrategy = "DAY_TRADING" | "SWING_TRADING" | "SMC_ICT" | "MEAN_REVERSION" | "ORDER_FLOW" | "GRID_TRADING" | "TREND_FOLLOWING" | "CUSTOM_DOC";
 
@@ -75,7 +76,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
 
         // Fallback analysis if fetch returns non-200 or network issues occur
         const isCall = Math.random() > 0.45;
-        const entryP = prices[symbolToAnalyze] || prices[symbolToAnalyze.replace('-OTC', '')] || 1.0850;
+        const entryP = getPriceForSymbol(prices, symbolToAnalyze);
         setAiAnalysis({
             symbol: symbolToAnalyze,
             directional_bias: isCall ? 'BUY' : 'SELL',
@@ -118,7 +119,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
 
         const randomPair = TRADABLE_PAIRS[Math.floor(Math.random() * TRADABLE_PAIRS.length)]?.symbol || "EURUSD";
         const isCall = Math.random() > 0.48;
-        const entryP = prices[randomPair] || prices[randomPair.replace('-OTC', '')] || 1.0850;
+        const entryP = getPriceForSymbol(prices, randomPair);
         const fallbackData = {
             symbol: randomPair,
             directional_bias: isCall ? 'BUY' : 'SELL',
@@ -132,7 +133,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
         setIsLoading(false);
     };
 
-    const currentPrice = prices[selectedSymbol] || aiAnalysis?.suggested_entry || 0;
+    const currentPrice = getPriceForSymbol(prices, selectedSymbol) || aiAnalysis?.suggested_entry || 0;
     const isCall = aiAnalysis?.directional_bias === "BUY";
 
     const copyPocketSignal = () => {

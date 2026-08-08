@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeData } from '../hooks/useRealtimeData';
+import { getPriceForSymbol } from '../utils/priceUtils';
 
 const ALL_STRATEGIES = [
   { id: "DAY_TRADING", name: "Day Trading (5M/15M)", baseWin: 87.2, color: "#FF6D00", desc: "VWAP Equilibrium, 9/20 EMA Cross & 5M Momentum" },
@@ -149,7 +150,7 @@ const AgentControlPanel = React.memo(function AgentControlPanel() {
     try {
       const isForex = signal.category === "FOREX";
       const decimals = isForex ? 4 : 2;
-      const currentPrice = prices[signal.symbol] || signal.suggested_entry || 100;
+      const currentPrice = getPriceForSymbol(prices, signal.symbol) || signal.suggested_entry;
       const isBuy = signal.directional_bias.includes("BUY");
 
       const finalTp = signal.tp !== undefined && signal.tp !== null
@@ -469,7 +470,7 @@ const AgentControlPanel = React.memo(function AgentControlPanel() {
         {signals.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
             {signals.map(signal => {
-              const livePrice = prices[signal.symbol] || signal.suggested_entry || 100;
+              const livePrice = getPriceForSymbol(prices, signal.symbol) || signal.suggested_entry;
               return (
                 <div key={signal.id || signal.symbol} className="w-full bg-[#12161D] p-5 rounded-lg border border-[#1F2833] shadow-2xl flex flex-col justify-between">
                   <div>

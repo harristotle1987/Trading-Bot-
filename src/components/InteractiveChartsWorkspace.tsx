@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, IPriceLine } from "lightweight-charts";
 import { TRADABLE_PAIRS } from "../App";
 import { formatPrice } from "../utils";
+import { getPriceForSymbol } from "../utils/priceUtils";
 
 interface RecommendedPair {
   symbol: string;
@@ -229,7 +230,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Demo Order
   const executeDemoTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const livePrice = prices[pair.symbol] || prices[pair.symbol.replace('-OTC', '')] || pair.suggested_entry || 100;
+      const livePrice = getPriceForSymbol(prices, pair.symbol) || pair.suggested_entry;
       const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/demo/place-order", {
         method: "POST",
@@ -264,7 +265,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Live Order
   const executeLiveTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const livePrice = prices[pair.symbol] || prices[pair.symbol.replace('-OTC', '')] || pair.suggested_entry || 100;
+      const livePrice = getPriceForSymbol(prices, pair.symbol) || pair.suggested_entry;
       const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/live/place-order", {
         method: "POST",
@@ -473,7 +474,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
               if (!isMounted) return clearInterval(updateInterval);
               try {
                   const data = globalPricesForChart;
-                  const targetPrice = data[selectedSymbol] || data[cleanSymbol];
+                  const targetPrice = getPriceForSymbol(data, selectedSymbol);
                   if (targetPrice) {
                       const newPrice = targetPrice;
                       

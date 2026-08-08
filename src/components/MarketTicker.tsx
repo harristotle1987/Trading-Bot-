@@ -1,15 +1,15 @@
 import React from "react";
 import { useRealtimeData } from "../hooks/useRealtimeData";
 import { TRADABLE_PAIRS } from "../App";
-import { formatPrice } from "../utils";
+import { getPriceForSymbol, formatSmartPrice } from "../utils/priceUtils";
 
 export default function MarketTicker() {
   const { prices } = useRealtimeData('prices');
 
   const getDisplayPrice = (symbol: string) => {
-    const val = prices[symbol];
-    if (typeof val === "number" && !isNaN(val)) {
-      return "$" + formatPrice(val);
+    const val = getPriceForSymbol(prices, symbol);
+    if (typeof val === "number" && !isNaN(val) && val > 0) {
+      return "$" + formatSmartPrice(val, symbol);
     }
     return "$1.00";
   };

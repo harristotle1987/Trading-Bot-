@@ -5,6 +5,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { calculatePositionTrajectory } from '../utils/tradeMath';
 import { TRADABLE_PAIRS } from '../App';
 import { useRealtimeData } from '../hooks/useRealtimeData';
+import { getPriceForSymbol } from '../utils/priceUtils';
 import { toast } from 'sonner';
 
 interface TradeSignal {
@@ -36,7 +37,7 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
     const handleExecuteSignal = async (s: TradeSignal) => {
     setExecutingSymbol(s.symbol);
     try {
-      const livePrice = prices[s.symbol] || s.entryPrice || 100;
+      const livePrice = getPriceForSymbol(prices, s.symbol) || s.entryPrice;
       
       // Optimistic mutation
       const optimisticPosition = {
@@ -269,7 +270,7 @@ const AgentInsightPanel = React.memo(function AgentInsightPanel({ selectedSymbol
                 category
               );
 
-              const livePrice = prices[s.symbol] || s.entryPrice;
+              const livePrice = getPriceForSymbol(prices, s.symbol) || s.entryPrice;
 
               return (
                 <div key={s.symbol} className="border border-[#1F2833] rounded p-3 bg-[#12161D] text-xs hover:border-[#3DDBD9] transition-colors flex flex-col justify-between">

@@ -79,12 +79,35 @@ export async function fetch500OHLCVCandles(symbol: string, timeframe: string): P
 
   // If external fetch didn't return 500 candles, generate realistic synthetic 500 bars seeded by symbol
   if (candles.length < 500) {
-    let basePrice = 50000;
-    if (cleanSymbol.includes('ETH')) basePrice = 3200;
-    else if (cleanSymbol.includes('SOL')) basePrice = 180;
-    else if (cleanSymbol.includes('EUR') || cleanSymbol.includes('GBP') || cleanSymbol.includes('USD')) basePrice = 1.0850;
-    else if (cleanSymbol.includes('XAU')) basePrice = 2450;
-    else if (cleanSymbol.includes('AAPL')) basePrice = 220;
+    let basePrice = 100;
+    if (cleanSymbol.includes('BTC')) basePrice = 64250;
+    else if (cleanSymbol.includes('ETH')) basePrice = 3450;
+    else if (cleanSymbol.includes('SOL')) basePrice = 148.5;
+    else if (cleanSymbol.includes('XRP')) basePrice = 0.58;
+    else if (cleanSymbol.includes('BNB')) basePrice = 580;
+    else if (cleanSymbol.includes('ADA')) basePrice = 0.38;
+    else if (cleanSymbol.includes('DOGE')) basePrice = 0.12;
+    else if (cleanSymbol.includes('AVAX')) basePrice = 26.5;
+    else if (cleanSymbol.includes('LINK')) basePrice = 14.2;
+    else if (cleanSymbol.includes('DOT')) basePrice = 6.80;
+    else if (cleanSymbol.includes('SUI')) basePrice = 1.85;
+    else if (cleanSymbol.includes('PEPE')) basePrice = 0.0000085;
+    else if (cleanSymbol.includes('SHIB')) basePrice = 0.0000175;
+    else if (cleanSymbol.includes('XAU')) basePrice = 2420.5;
+    else if (cleanSymbol.includes('XAG')) basePrice = 28.4;
+    else if (cleanSymbol.includes('USOIL')) basePrice = 76.5;
+    else if (cleanSymbol.includes('AAPL')) basePrice = 224.5;
+    else if (cleanSymbol.includes('MSFT')) basePrice = 448.2;
+    else if (cleanSymbol.includes('TSLA')) basePrice = 218.4;
+    else if (cleanSymbol.includes('NVDA')) basePrice = 128.5;
+    else if (cleanSymbol.includes('AMZN')) basePrice = 182.6;
+    else if (cleanSymbol.includes('GOOGL')) basePrice = 172.8;
+    else if (cleanSymbol.includes('META')) basePrice = 485.0;
+    else if (cleanSymbol.includes('PLTR')) basePrice = 28.5;
+    else if (cleanSymbol.includes('COIN')) basePrice = 215.0;
+    else if (cleanSymbol.includes('JPY')) basePrice = 154.2;
+    else if (cleanSymbol.includes('GBP')) basePrice = 1.2845;
+    else if (cleanSymbol.includes('EUR') || cleanSymbol.length === 6) basePrice = 1.0852;
 
     const now = Date.now();
     const timeframeMs = timeframe === '1h' ? 3600000 : timeframe === '4h' ? 14400000 : timeframe === '1d' ? 86400000 : 900000;

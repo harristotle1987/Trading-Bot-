@@ -1365,9 +1365,17 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     const durationMs = getDurationMs(reqTimeframe);
 
     const signals = basePairs.map((item, idx) => {
-      const price = GLOBAL_PRICES[item.cleanSym] || (item.cleanSym.includes("USD") && !item.cleanSym.includes("USDT") ? 1.0850 + idx * 0.012 : 64000);
-      const isForex = item.cleanSym.length === 6;
-      const formattedPrice = isForex ? parseFloat(price.toFixed(5)) : parseFloat(price.toFixed(2));
+      const price = GLOBAL_PRICES[item.cleanSym] || GLOBAL_PRICES[item.symbol] || (
+        item.cleanSym.includes("BTC") ? 64250 :
+        item.cleanSym.includes("ETH") ? 3450 :
+        item.cleanSym.includes("SOL") ? 148.5 :
+        item.cleanSym.includes("XAU") ? 2420.5 :
+        item.cleanSym.includes("JPY") ? 154.2 :
+        item.cleanSym.includes("GBP") ? 1.2845 : 1.0852
+      );
+      const isForex = item.cleanSym.length === 6 && !item.cleanSym.includes("USDT");
+      const isJpy = item.cleanSym.includes("JPY");
+      const formattedPrice = isForex ? (isJpy ? parseFloat(price.toFixed(3)) : parseFloat(price.toFixed(5))) : parseFloat(price.toFixed(2));
       const createdAgo = idx * Math.min(60000, durationMs * 0.2);
 
       return {
@@ -1396,11 +1404,20 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
 
   app.post("/api/pocket-option/generate-signal", express.json(), (req, res) => {
     const { symbol, isOtc, strategyName, timeframe } = req.body || {};
-    const target = (symbol || "EURUSD").replace(/[^a-zA-Z]/g, '').toUpperCase();
-    const cleanSym = target || "EURUSD";
-    const price = GLOBAL_PRICES[cleanSym] || 1.0850;
-    const isForex = cleanSym.length === 6;
-    const formattedPrice = isForex ? parseFloat(price.toFixed(5)) : parseFloat(price.toFixed(2));
+    const norm = normalizeSymbol(symbol || "EURUSD");
+    const cleanSym = norm || "EURUSD";
+    const price = GLOBAL_PRICES[norm] || GLOBAL_PRICES[symbol as string] || (
+      cleanSym.includes("BTC") ? 64250 :
+      cleanSym.includes("ETH") ? 3450 :
+      cleanSym.includes("SOL") ? 148.5 :
+      cleanSym.includes("XAU") ? 2420.5 :
+      cleanSym.includes("NVDA") ? 128.5 :
+      cleanSym.includes("AAPL") ? 224.5 :
+      cleanSym.includes("JPY") ? 154.2 : 1.0852
+    );
+    const isForex = cleanSym.length === 6 && !cleanSym.includes("USDT");
+    const isJpy = cleanSym.includes("JPY");
+    const formattedPrice = isForex ? (isJpy ? parseFloat(price.toFixed(3)) : parseFloat(price.toFixed(5))) : parseFloat(price.toFixed(2));
 
     const hash = cleanSym.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), Date.now());
     const isCall = hash % 2 === 0;
@@ -2225,18 +2242,31 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       if (interval === "60") intervalMs = 3600000;
       if (interval === "D") intervalMs = 86400000;
       
-      let currentPrice = GLOBAL_PRICES[normSym] || GLOBAL_PRICES[symbol as string] || (normSym.includes("USDT") ? 150 : normSym.length === 6 ? 1.0850 : 200);
+      const basePrice = GLOBAL_PRICES[normSym] || GLOBAL_PRICES[symbol as string] || (
+        normSym.includes("BTC") ? 64250 :
+        normSym.includes("ETH") ? 3450 :
+        normSym.includes("SOL") ? 148.5 :
+        normSym.includes("XAU") ? 2420.5 :
+        normSym.includes("NVDA") ? 128.5 :
+        normSym.includes("AAPL") ? 224.5 :
+        normSym.includes("JPY") ? 154.2 : 1.0852
+      );
+      const isForex = normSym.length === 6 && !normSym.includes("USDT");
+      const isJpy = normSym.includes("JPY");
+      const decimals = isForex ? (isJpy ? 3 : 5) : (basePrice < 1 ? 4 : 2);
+
+      let runningPrice = basePrice;
       const list = [];
       const now = Math.floor(Date.now() / intervalMs) * intervalMs;
       for (let i = 0; i < parsedLimit; i++) {
           const time = now - (i * intervalMs);
-          const volatility = currentPrice * 0.002; // 0.2% max range variance per candle
-          const close = currentPrice;
+          const volatility = runningPrice * 0.0015; // 0.15% max range variance
+          const close = runningPrice;
           const high = close + (Math.random() * volatility);
           const low = Math.max(0.0001, close - (Math.random() * volatility));
           const open = low + (Math.random() * (high - low));
-          currentPrice = open;
-          list.push([time.toString(), open.toFixed(2), high.toFixed(2), low.toFixed(2), close.toFixed(2), "100", "500000"]);
+          runningPrice = open;
+          list.push([time.toString(), open.toFixed(decimals), high.toFixed(decimals), low.toFixed(decimals), close.toFixed(decimals), "100", "500000"]);
       }
       
       return res.json({
