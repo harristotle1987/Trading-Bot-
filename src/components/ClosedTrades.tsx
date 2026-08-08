@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useClosedTrades } from "../hooks/useTradeState";
 import { toast } from "sonner";
-import { formatSmartPrice } from "../utils/priceUtils";
 
 interface ClosedPosition {
   id: string;
@@ -66,7 +65,7 @@ export default function ClosedTrades() {
                   <tr key={t.id} className="hover:bg-[#1A1A22] transition-colors">
                     <td className="p-4 text-white font-bold">{t.symbol}</td>
                     <td className={`p-4 ${t.side === "BUY" ? "text-[#00E676]" : "text-[#FF1744]"}`}>{t.side}</td>
-                    <td className="p-4 text-[#838C9C]">{formatSmartPrice(t.entry_price, t.symbol, true)}</td>
+                    <td className="p-4 text-[#838C9C]">${t.entry_price}</td>
                     <td className="p-4 text-white font-bold">
                       {t.pips !== undefined ? (
                         <span className={t.pips >= 0 ? "text-[#00E676]" : "text-[#FF1744]"}>

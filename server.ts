@@ -1144,7 +1144,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
                       max_tokens: 220,
                       temperature: 0.2
                   }),
-                  signal: AbortSignal.timeout(4500)
+                  signal: AbortSignal.timeout(10000)
               });
 
               if (aiRes.ok) {
@@ -1171,8 +1171,8 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
                       });
                   }
               }
-          } catch (err: any) {
-              console.log("[evaluate-pair] NVIDIA NIM info:", err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 'Response timed out, using fallback AI/quant engine' : err?.message || err);
+          } catch (err) {
+              console.warn("NVIDIA API endpoint error in evaluate-pair:", err);
           }
       }
 

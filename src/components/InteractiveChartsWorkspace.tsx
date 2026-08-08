@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, IPriceLine } from "lightweight-charts";
 import { TRADABLE_PAIRS } from "../App";
 import { formatPrice } from "../utils";
-import { getPriceForSymbol, formatSmartPrice } from "../utils/priceUtils";
+import { getPriceForSymbol } from "../utils/priceUtils";
 
 interface RecommendedPair {
   symbol: string;
@@ -585,7 +585,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
             <div className="mb-4 text-sm text-[#838C9C] font-mono">
               <p>Pair: <strong className="text-white">{tradeModal.pair.symbol}</strong></p>
               <p>Direction: <strong className={tradeModal.pair.directional_bias.includes("BUY") ? "text-[#00E676]" : "text-[#FF1744]"}>{tradeModal.pair.directional_bias.includes("BUY") ? "BUY" : "SELL"}</strong></p>
-              <p>Entry Price: <strong className="text-white">{formatSmartPrice(tradeModal.pair.suggested_entry, tradeModal.pair.symbol, true)}</strong></p>
+              <p>Entry Price: <strong className="text-white">${formatPrice(tradeModal.pair.suggested_entry)}</strong></p>
             </div>
             
             <div className="mb-6">
@@ -1030,9 +1030,9 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
                   <p className="text-xs text-[#838C9C] mb-3 leading-relaxed">{item.reasoning}</p>
 
                   <div className="grid grid-cols-3 text-[11px] font-mono text-gray-400 bg-[#12161D] p-2 rounded-md mb-3 border border-[#1F2833]">
-                    <div>Entry: <span className="text-white block mt-0.5 font-bold">{formatSmartPrice(item.suggested_entry, item.symbol, true)}</span></div>
-                    <div>SL: <span className="text-[#FF1744] block mt-0.5 font-bold">{formatSmartPrice(item.suggested_sl, item.symbol, true)}</span></div>
-                    <div>TP: <span className="text-[#00E676] block mt-0.5 font-bold">{formatSmartPrice(item.suggested_tp, item.symbol, true)}</span></div>
+                    <div>Entry: <span className="text-white block mt-0.5 font-bold">${formatPrice(item.suggested_entry)}</span></div>
+                    <div>SL: <span className="text-[#FF1744] block mt-0.5 font-bold">${formatPrice(item.suggested_sl)}</span></div>
+                    <div>TP: <span className="text-[#00E676] block mt-0.5 font-bold">${formatPrice(item.suggested_tp)}</span></div>
                   </div>
 
                   {/* Actions */}

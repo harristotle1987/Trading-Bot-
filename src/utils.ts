@@ -1,5 +1,7 @@
-import { formatSmartPrice } from './utils/priceUtils';
-
-export const formatPrice = (price: number, symbol?: string): string => {
-  return formatSmartPrice(price, symbol);
+export const formatPrice = (price: number): string => {
+  if (price < 10) {
+    return price.toFixed(4);
+  } else {
+    return price.toFixed(2);
+  }
 };

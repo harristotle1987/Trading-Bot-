@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useRealtimeData } from '../hooks/useRealtimeData';
-import { getPriceForSymbol, formatSmartPrice } from '../utils/priceUtils';
+import { getPriceForSymbol } from '../utils/priceUtils';
 
 const ALL_STRATEGIES = [
   { id: "DAY_TRADING", name: "Day Trading (5M/15M)", baseWin: 87.2, color: "#FF6D00", desc: "VWAP Equilibrium, 9/20 EMA Cross & 5M Momentum" },
@@ -478,7 +478,7 @@ const AgentControlPanel = React.memo(function AgentControlPanel() {
                       <div>
                         <span className="text-xl font-bold text-white block font-mono">{signal.symbol}</span>
                         <span className="text-lg font-bold mt-0.5 block text-[#66FCF1] font-mono">
-                          {formatSmartPrice(livePrice, signal.symbol, true)}
+                          ${livePrice.toFixed(signal.category === "FOREX" ? 4 : 2)}
                         </span>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded font-bold ${signal.directional_bias?.includes("BUY") ? "bg-[#00E676] text-black" : "bg-[#FF1744] text-white"}`}>
@@ -491,7 +491,7 @@ const AgentControlPanel = React.memo(function AgentControlPanel() {
                         <p>Calculated Win Rate: <span className="text-[#66FCF1] font-bold text-sm">{signal.win_rate_probability}%</span></p>
                         {signal.suggested_entry && (
                           <span className="text-[10px] bg-[#1F2833] text-[#3DDBD9] px-2 py-0.5 rounded font-mono font-bold">
-                            Entry: {formatSmartPrice(signal.suggested_entry, signal.symbol, true)}
+                            Entry: ${signal.suggested_entry}
                           </span>
                         )}
                       </div>
