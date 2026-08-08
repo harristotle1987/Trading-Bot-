@@ -105,26 +105,58 @@ export function getPriceForSymbol(prices: Record<string, number> | undefined, ra
   return 100;
 }
 
-export function formatSmartPrice(price: number, symbol?: string): string {
+export function isForexSymbol(symbol?: string): boolean {
+  if (!symbol) return false;
+  const sym = symbol.toUpperCase().replace(/[\/-]/g, '').replace(/\(OTC\)/gi, '').replace(/\(STOCK\)/gi, '').replace(/OTC/gi, '').trim();
+
+  const NON_FOREX_KEYWORDS = [
+    'USDT', 'BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'ADA', 'DOGE', 'AVAX', 'LINK',
+    'DOT', 'NEAR', 'SUI', 'APT', 'MATIC', 'LTC', 'UNI', 'ATOM', 'ETC', 'FIL',
+    'ARB', 'PEPE', 'SHIB', 'INJ', 'RNDR', 'OP', 'TIA', 'AAVE', 'FET', 'WIF',
+    'XAU', 'XAG', 'GOLD', 'SILVER', 'OIL', 'USOIL',
+    'AAPL', 'MSFT', 'TSLA', 'AMZN', 'GOOGL', 'NVDA', 'META', 'AMD', 'NFLX', 'PLTR', 'COIN'
+  ];
+
+  for (const nonFx of NON_FOREX_KEYWORDS) {
+    if (sym.includes(nonFx)) return false;
+  }
+
+  const FOREX_BASE_CURRENCIES = ['EUR', 'GBP', 'AUD', 'NZD', 'USD', 'CAD', 'CHF', 'JPY'];
+  if (sym.length === 6) {
+    const c1 = sym.substring(0, 3);
+    const c2 = sym.substring(3, 6);
+    return FOREX_BASE_CURRENCIES.includes(c1) && FOREX_BASE_CURRENCIES.includes(c2);
+  }
+
+  return ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'EURAUD', 'GBPCAD', 'CADJPY', 'CHFJPY', 'EURNZD', 'GBPAUD'].some(fx => sym.includes(fx));
+}
+
+export function formatSmartPrice(price: number, symbol?: string, withCurrency = false): string {
   if (price === undefined || price === null || isNaN(price)) return '0.00';
-  
+
   const symUpper = symbol ? symbol.toUpperCase() : '';
-  const isForex = (symUpper.includes('EUR') || symUpper.includes('GBP') || symUpper.includes('AUD') || symUpper.includes('CAD') || symUpper.includes('CHF') || symUpper.includes('NZD') || symUpper.includes('USD')) && !symUpper.includes('USDT') && !symUpper.includes('BTC') && !symUpper.includes('ETH') && !symUpper.includes('SOL');
-  
-  if (isForex && !symUpper.includes('JPY')) {
-    return price.toFixed(5);
+  const isFx = isForexSymbol(symbol);
+
+  let formatted = '';
+
+  if (isFx) {
+    if (symUpper.includes('JPY')) {
+      formatted = price.toFixed(3);
+    } else {
+      formatted = price.toFixed(5);
+    }
+    return formatted; // Forex exchange rates don't use $ prefix
   }
-  if (isForex && symUpper.includes('JPY')) {
-    return price.toFixed(3);
+
+  if (price < 0.0001) {
+    formatted = price.toFixed(8);
+  } else if (price < 1) {
+    formatted = price.toFixed(4);
+  } else if (price < 10) {
+    formatted = price.toFixed(3);
+  } else {
+    formatted = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  if (price < 0.001) {
-    return price.toFixed(8);
-  }
-  if (price < 1) {
-    return price.toFixed(4);
-  }
-  if (price < 10) {
-    return price.toFixed(3);
-  }
-  return price.toFixed(2);
+
+  return withCurrency ? `$${formatted}` : formatted;
 }

@@ -6,6 +6,7 @@ import {
   TrendingUp, TrendingDown, ShieldAlert, Layers, Cpu, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatSmartPrice } from '../utils/priceUtils';
 
 export interface StrategySweepDoc {
   sweepId: string;
@@ -268,7 +269,7 @@ export default function StrategySweepDashboard({ selectedSymbol = 'BTCUSDT', sel
                 <div className="p-3.5 rounded-xl bg-[#12161D] border border-[#232833] flex flex-col justify-between">
                   <span className="text-[10px] font-mono text-[#838C9C] uppercase font-bold">Suggested Entry</span>
                   <div className="mt-1 text-base font-extrabold font-mono text-white">
-                    ${latestSweep.recommendation.entry.toLocaleString()}
+                    {formatSmartPrice(latestSweep.recommendation.entry, latestSweep.symbol, true)}
                   </div>
                   <span className="text-[10px] font-mono text-[#838C9C]">Live Price Trigger</span>
                 </div>
@@ -277,7 +278,7 @@ export default function StrategySweepDashboard({ selectedSymbol = 'BTCUSDT', sel
                 <div className="p-3.5 rounded-xl bg-[#12161D] border border-[#00E676]/30 flex flex-col justify-between">
                   <span className="text-[10px] font-mono text-[#00E676] uppercase font-bold">Take Profit (TP)</span>
                   <div className="mt-1 text-base font-extrabold font-mono text-[#00E676]">
-                    ${latestSweep.recommendation.tp.toLocaleString()}
+                    {formatSmartPrice(latestSweep.recommendation.tp, latestSweep.symbol, true)}
                   </div>
                   <span className="text-[10px] font-mono text-[#00E676]">Target Level</span>
                 </div>
@@ -286,7 +287,7 @@ export default function StrategySweepDashboard({ selectedSymbol = 'BTCUSDT', sel
                 <div className="p-3.5 rounded-xl bg-[#12161D] border border-[#FF1744]/30 flex flex-col justify-between">
                   <span className="text-[10px] font-mono text-[#FF1744] uppercase font-bold">Stop Loss (SL)</span>
                   <div className="mt-1 text-base font-extrabold font-mono text-[#FF1744]">
-                    ${latestSweep.recommendation.sl.toLocaleString()}
+                    {formatSmartPrice(latestSweep.recommendation.sl, latestSweep.symbol, true)}
                   </div>
                   <span className="text-[10px] font-mono text-[#FF1744]">Protection Level</span>
                 </div>

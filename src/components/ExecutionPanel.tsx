@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { toast } from 'sonner';
+import { formatSmartPrice } from '../utils/priceUtils';
 
 function ConfirmationModal({ 
   isOpen, 
@@ -212,8 +213,8 @@ export default function ExecutionPanel() {
                   <td className="py-3 px-4 text-white font-bold">{pos.symbol}</td>
                   <td className={`py-3 px-4 font-bold ${side === 'LONG' ? 'text-[#00E676]' : 'text-[#FF1744]'}`}>{side}</td>
                   <td className="py-3 px-4 text-white">{typeof size === 'number' ? size.toFixed(4) : size}</td>
-                  <td className="py-3 px-4 text-white">${entry.toFixed(2)}</td>
-                  <td className="py-3 px-4 text-white">${markPrice.toFixed(2)}</td>
+                  <td className="py-3 px-4 text-white">{formatSmartPrice(entry, pos.symbol, true)}</td>
+                  <td className="py-3 px-4 text-white">{formatSmartPrice(markPrice, pos.symbol, true)}</td>
                   <td className="py-3 px-4">
                       <span className={`px-2 py-1 rounded font-bold ${pnl >= 0 ? 'bg-[#00E676] text-[#0B0C10]' : 'bg-[#FF1744] text-white'}`}>
                         ${pnl.toFixed(2)}

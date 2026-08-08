@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, RefreshCw, Trophy, Target, Award, BarChart3, Plus, Copy } from "lucide-react";
+import { formatSmartPrice } from "../utils/priceUtils";
 
 export interface PocketSignalLog {
   id: string;
@@ -186,8 +187,8 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                       </span>
                     </td>
                     <td className="p-3.5 font-bold text-[#3DDBD9]">{log.expiry}</td>
-                    <td className="p-3.5 text-[#E6E9EF]">${log.entryPrice}</td>
-                    <td className="p-3.5 text-[#838C9C]">${log.exitPrice || log.entryPrice}</td>
+                    <td className="p-3.5 text-[#E6E9EF]">{formatSmartPrice(log.entryPrice, log.symbol, true)}</td>
+                    <td className="p-3.5 text-[#838C9C]">{formatSmartPrice(log.exitPrice || log.entryPrice, log.symbol, true)}</td>
                     <td className="p-3.5 text-[#838C9C]">{log.strategy}</td>
                     <td className="p-3.5 text-[#00E676] font-bold">{log.winRateScore}%</td>
                     <td className="p-3.5">

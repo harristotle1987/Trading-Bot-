@@ -9,9 +9,9 @@ export default function MarketTicker() {
   const getDisplayPrice = (symbol: string) => {
     const val = getPriceForSymbol(prices, symbol);
     if (typeof val === "number" && !isNaN(val) && val > 0) {
-      return "$" + formatSmartPrice(val, symbol);
+      return formatSmartPrice(val, symbol, true);
     }
-    return "$1.00";
+    return formatSmartPrice(1.0852, symbol, true);
   };
 
   return (
