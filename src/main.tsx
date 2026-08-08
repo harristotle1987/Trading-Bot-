@@ -16,6 +16,18 @@ console.error = (...args) => {
   originalError.call(console, ...args);
 };
 
+const originalWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && (args[0].includes('Vite\'s Node API is deprecated') || args[0].includes('Vite CJS'))) return;
+  originalWarn.call(console, ...args);
+};
+
+const originalLog = console.log;
+console.log = (...args) => {
+  if (typeof args[0] === 'string' && (args[0].includes('Vite\'s Node API is deprecated') || args[0].includes('Vite CJS'))) return;
+  originalLog.call(console, ...args);
+};
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

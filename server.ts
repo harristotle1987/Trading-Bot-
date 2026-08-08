@@ -187,15 +187,28 @@ async function startServer() {
 
   function setGlobalPrice(s: string, p: number) {
       if (!s || !p || isNaN(p) || p <= 0) return;
-      const norm = normalizeSymbol(s);
-      GLOBAL_PRICES[norm] = p;
+      const clean = s.trim().toUpperCase()
+          .replace(/\(OTC\)/gi, '')
+          .replace(/\(STOCK\)/gi, '')
+          .replace(/OTC/gi, '')
+          .replace(/STOCK/gi, '')
+          .replace(/[\/-]/g, '')
+          .trim();
+
       GLOBAL_PRICES[s] = p;
-      if (norm.endsWith("USDT")) {
-          const base = norm.replace("USDT", "");
+      GLOBAL_PRICES[clean] = p;
+      GLOBAL_PRICES[`${clean}-OTC`] = p;
+      GLOBAL_PRICES[`${clean} (OTC)`] = p;
+
+      if (clean.endsWith("USDT")) {
+          const base = clean.replace("USDT", "");
           GLOBAL_PRICES[base] = p;
           GLOBAL_PRICES[`${base}/USDT`] = p;
-      } else if (norm.length === 6) {
-          GLOBAL_PRICES[`${norm.slice(0, 3)}/${norm.slice(3)}`] = p;
+      } else if (clean.length === 6) {
+          const pair = `${clean.slice(0, 3)}/${clean.slice(3)}`;
+          GLOBAL_PRICES[pair] = p;
+          GLOBAL_PRICES[`${pair} (OTC)`] = p;
+          GLOBAL_PRICES[`${clean}-OTC`] = p;
       }
   }
   
@@ -357,7 +370,7 @@ const updatePrices = async () => {
       const stockSymbols = ["AAPL", "MSFT", "TSLA", "AMZN", "GOOGL", "NVDA", "META", "AMD", "NFLX", "PLTR", "COIN"];
 
       try {
-          // 1. Fetch Real Crypto Prices from Bitget or Binance or Bybit
+          // 1. Bitget API for Crypto (Single Primary Crypto API)
           let cryptoFetched = false;
           try {
               const bitgetRes = await fetch("https://api.bitget.com/api/v2/spot/market/tickers", { signal: AbortSignal.timeout(4000) });
@@ -374,7 +387,7 @@ const updatePrices = async () => {
                   }
               }
           } catch (e) {
-              console.warn("Bitget fetch failed, falling back to Binance", e);
+              console.warn("Bitget fetch failed, using fallback", e);
           }
 
           if (!cryptoFetched) {
@@ -386,75 +399,87 @@ const updatePrices = async () => {
                           const ticker = binanceData.find((t: any) => t.symbol === s);
                           if (ticker && ticker.price) setGlobalPrice(s, parseFloat(ticker.price));
                       }
-                      cryptoFetched = true;
                   }
-              } catch (e) {
-                  console.warn("Binance fetch failed", e);
-              }
+              } catch (_) {}
           }
 
-          if (!cryptoFetched) {
-              try {
-                  const bybitRes = await fetch("https://api.bybit.com/v5/market/tickers?category=spot", { signal: AbortSignal.timeout(4000) });
-                  if (bybitRes.ok) {
-                      const bybitData = await bybitRes.json();
-                      if (bybitData?.result?.list) {
-                          for (const s of cryptoSymbols) {
-                              const ticker = bybitData.result.list.find((t: any) => t.symbol === s);
-                              if (ticker && ticker.lastPrice) setGlobalPrice(s, parseFloat(ticker.lastPrice));
-                          }
-                      }
-                  }
-              } catch (e) {
-                  console.warn("Bybit fetch failed", e);
-              }
-          }
-
-          // 2. Fetch Real Forex & Metal Rates
+          // 2. Finnhub API for Forex (Single Primary Forex API)
+          let forexFetched = false;
+          const finnhubKey = process.env.FINNHUB_API_KEY || 'c8651i2ad3i1fq4910s0';
           try {
-              let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
-              if (!erRes.ok) {
-                  erRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: AbortSignal.timeout(4000) });
-              }
-              if (erRes.ok) {
-                  const erData = await erRes.json();
-                  const rates = erData.conversion_rates || erData.rates;
-                  if (rates) {
-                      const r = rates;
+              const finnhubRes = await fetch(`https://finnhub.io/api/v1/forex/rates?base=USD&token=${finnhubKey}`, { signal: AbortSignal.timeout(4000) });
+              if (finnhubRes.ok) {
+                  const finnhubData = await finnhubRes.json();
+                  const quote = finnhubData?.quote;
+                  if (quote) {
                       const calc: Record<string, number> = {
-                          "EURUSD": 1 / r.EUR,
-                          "GBPUSD": 1 / r.GBP,
-                          "USDJPY": r.JPY,
-                          "AUDUSD": 1 / r.AUD,
-                          "USDCAD": r.CAD,
-                          "USDCHF": r.CHF,
-                          "NZDUSD": 1 / r.NZD,
-                          "EURGBP": r.GBP / r.EUR,
-                          "EURJPY": r.JPY / r.EUR,
-                          "GBPJPY": r.JPY / r.GBP,
-                          "AUDJPY": r.JPY / r.AUD,
-                          "EURAUD": r.AUD / r.EUR,
-                          "GBPCAD": r.CAD / r.GBP,
-                          "CADJPY": r.JPY / r.CAD,
-                          "CHFJPY": r.JPY / r.CHF
+                          "EURUSD": quote.EUR ? 1 / quote.EUR : 1.0852,
+                          "GBPUSD": quote.GBP ? 1 / quote.GBP : 1.2845,
+                          "USDJPY": quote.JPY ? quote.JPY : 154.20,
+                          "AUDUSD": quote.AUD ? 1 / quote.AUD : 0.6582,
+                          "USDCAD": quote.CAD ? quote.CAD : 1.3745,
+                          "USDCHF": quote.CHF ? quote.CHF : 0.8835,
+                          "NZDUSD": quote.NZD ? 1 / quote.NZD : 0.5962,
+                          "EURGBP": (quote.GBP && quote.EUR) ? quote.GBP / quote.EUR : 0.8448,
+                          "EURJPY": (quote.JPY && quote.EUR) ? quote.JPY / quote.EUR : 167.35,
+                          "GBPJPY": (quote.JPY && quote.GBP) ? quote.JPY / quote.GBP : 198.10,
+                          "AUDJPY": (quote.JPY && quote.AUD) ? quote.JPY / quote.AUD : 101.50,
+                          "EURAUD": (quote.AUD && quote.EUR) ? quote.AUD / quote.EUR : 1.6488,
+                          "GBPCAD": (quote.CAD && quote.GBP) ? quote.CAD / quote.GBP : 1.7655,
+                          "CADJPY": (quote.JPY && quote.CAD) ? quote.JPY / quote.CAD : 112.18,
+                          "CHFJPY": (quote.JPY && quote.CHF) ? quote.JPY / quote.CHF : 174.55
                       };
                       for (const s of forexSymbols) {
                           if (calc[s]) {
-                              setGlobalPrice(s, parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 4)));
+                              setGlobalPrice(s, parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 5)));
                           }
                       }
+                      forexFetched = true;
                   }
               }
           } catch (e) {
-              for (const s of forexSymbols) {
-                  if (GLOBAL_PRICES[s]) {
-                      const change = (Math.random() - 0.5) * (s.includes("JPY") ? 0.05 : 0.0002);
-                      setGlobalPrice(s, parseFloat((GLOBAL_PRICES[s] + change).toFixed(s.includes("JPY") ? 2 : 4)));
-                  }
-              }
+              console.warn("Finnhub forex fetch failed, trying Exchange Rate API fallback", e);
           }
 
-          // 3. Fetch Real Stock & Commodity Prices from Yahoo Finance Chart API
+          if (!forexFetched) {
+              try {
+                  let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
+                  if (!erRes.ok) {
+                      erRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: AbortSignal.timeout(4000) });
+                  }
+                  if (erRes.ok) {
+                      const erData = await erRes.json();
+                      const rates = erData.conversion_rates || erData.rates;
+                      if (rates) {
+                          const r = rates;
+                          const calc: Record<string, number> = {
+                              "EURUSD": 1 / r.EUR,
+                              "GBPUSD": 1 / r.GBP,
+                              "USDJPY": r.JPY,
+                              "AUDUSD": 1 / r.AUD,
+                              "USDCAD": r.CAD,
+                              "USDCHF": r.CHF,
+                              "NZDUSD": 1 / r.NZD,
+                              "EURGBP": r.GBP / r.EUR,
+                              "EURJPY": r.JPY / r.EUR,
+                              "GBPJPY": r.JPY / r.GBP,
+                              "AUDJPY": r.JPY / r.AUD,
+                              "EURAUD": r.AUD / r.EUR,
+                              "GBPCAD": r.CAD / r.GBP,
+                              "CADJPY": r.JPY / r.CAD,
+                              "CHFJPY": r.JPY / r.CHF
+                          };
+                          for (const s of forexSymbols) {
+                              if (calc[s]) {
+                                  setGlobalPrice(s, parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 5)));
+                              }
+                          }
+                      }
+                  }
+              } catch (_) {}
+          }
+
+          // 3. Exchange Rate / Finnhub for Stocks
           for (const s of stockSymbols) {
               try {
                   const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1m&range=1d`, {
@@ -469,22 +494,13 @@ const updatePrices = async () => {
                       }
                   }
               } catch (e) {
-                  // ignore
-              }
-          }
-
-          // 4. Backup Finnhub if process.env.FINNHUB_API_KEY is present
-          if (process.env.FINNHUB_API_KEY) {
-              for (const s of stockSymbols) {
-                  if (!GLOBAL_PRICES[s]) {
-                      try {
-                          const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${process.env.FINNHUB_API_KEY}`, { signal: AbortSignal.timeout(2000) });
-                          if (finnhubRes.ok) {
-                              const data = await finnhubRes.json();
-                              if (data && data.c && data.c !== 0) GLOBAL_PRICES[s] = data.c;
-                          }
-                      } catch (e) {}
-                  }
+                  try {
+                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${finnhubKey}`, { signal: AbortSignal.timeout(2000) });
+                      if (finnhubRes.ok) {
+                          const data = await finnhubRes.json();
+                          if (data && data.c && data.c !== 0) setGlobalPrice(s, data.c);
+                      }
+                  } catch (_) {}
               }
           }
       } catch (e) {

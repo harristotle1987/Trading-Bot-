@@ -46,7 +46,6 @@ export function usePWA() {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                 console.log('[PWA] New update installed! Available on next launch.');
                 setIsUpdateAvailable(true);
-                toast.info('A new update is available. It will be applied the next time you open the app, or you can refresh manually.', { duration: 6000 });
               }
             });
           }
@@ -75,7 +74,6 @@ export function usePWA() {
               setCurrentVersion(data.version);
             } else if (initialVersion !== data.version) {
               console.log(`[PWA] Server version update detected (${initialVersion} -> ${data.version}).`);
-              toast.info('New app version detected. You can refresh manually to apply the changes.', { duration: 6000 });
             }
           }
         }
