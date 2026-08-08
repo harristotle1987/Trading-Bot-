@@ -44,7 +44,6 @@ export function usePWA() {
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] New update installed! Available on next launch.');
                 setIsUpdateAvailable(true);
               }
             });
@@ -72,8 +71,6 @@ export function usePWA() {
             if (!initialVersion) {
               initialVersion = data.version;
               setCurrentVersion(data.version);
-            } else if (initialVersion !== data.version) {
-              console.log(`[PWA] Server version update detected (${initialVersion} -> ${data.version}).`);
             }
           }
         }

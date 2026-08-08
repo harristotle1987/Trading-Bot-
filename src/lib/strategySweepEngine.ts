@@ -544,6 +544,8 @@ Be direct, professional, and highlight technical confluence (order blocks, indic
   };
 }
 
+export const inMemoryStrategySweeps: StrategySweepResult[] = [];
+
 // Master Execution Function for Background Sweep
 export async function executeStrategySweep(symbol: string, timeframe: string): Promise<string> {
   const sweepId = `sweep_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -567,6 +569,12 @@ export async function executeStrategySweep(symbol: string, timeframe: string): P
     },
     allStrategyMetrics: []
   };
+
+  // Add to in-memory list
+  inMemoryStrategySweeps.unshift(initialRecord);
+  if (inMemoryStrategySweeps.length > 50) {
+    inMemoryStrategySweeps.pop();
+  }
 
   // Save initial 'processing' record to Firestore
   if (adminDb) {
@@ -614,17 +622,37 @@ export async function executeStrategySweep(symbol: string, timeframe: string): P
         }))
       };
 
+      // Update in-memory record
+      const inMemIndex = inMemoryStrategySweeps.findIndex(item => item.sweepId === sweepId);
+      if (inMemIndex !== -1) {
+        inMemoryStrategySweeps[inMemIndex] = {
+          ...inMemoryStrategySweeps[inMemIndex],
+          ...completedRecord
+        } as StrategySweepResult;
+      }
+
       if (adminDb) {
         await adminDb.collection('strategy_sweeps').doc(sweepId).update(completedRecord);
         console.log(`[Strategy Sweep] Completed sweep ${sweepId} for ${symbol}. Winning: ${winningStrategy.name}`);
       }
     } catch (err: any) {
       console.error(`[Strategy Sweep] Failed sweep ${sweepId}:`, err);
+      const failedRecord = {
+        status: 'failed' as const,
+        error: err?.message || 'Unknown strategy sweep error'
+      };
+      
+      // Update in-memory record
+      const inMemIndex = inMemoryStrategySweeps.findIndex(item => item.sweepId === sweepId);
+      if (inMemIndex !== -1) {
+        inMemoryStrategySweeps[inMemIndex] = {
+          ...inMemoryStrategySweeps[inMemIndex],
+          ...failedRecord
+        };
+      }
+
       if (adminDb) {
-        await adminDb.collection('strategy_sweeps').doc(sweepId).update({
-          status: 'failed',
-          error: err?.message || 'Unknown strategy sweep error'
-        });
+        await adminDb.collection('strategy_sweeps').doc(sweepId).update(failedRecord);
       }
     }
   }, 3500);

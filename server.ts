@@ -11,7 +11,7 @@ import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { adminDb as db, initFirebaseAdmin } from "./src/lib/firebase";
-import { executeStrategySweep } from "./src/lib/strategySweepEngine";
+import { executeStrategySweep, inMemoryStrategySweeps } from "./src/lib/strategySweepEngine";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
@@ -760,18 +760,23 @@ const updatePrices = async () => {
 
   app.get("/api/agent/strategy-sweep/latest", async (req, res) => {
     try {
-      if (!db) {
-        return res.status(500).json({ error: "Firestore DB not initialized" });
+      if (!db || firestoreDisabled) {
+        return res.json({ success: true, sweeps: inMemoryStrategySweeps.slice(0, 10) });
       }
-      const snapshot = await db.collection("strategy_sweeps")
-        .orderBy("createdAt", "desc")
-        .limit(10)
-        .get();
+      try {
+        const snapshot = await db.collection("strategy_sweeps")
+          .orderBy("createdAt", "desc")
+          .limit(10)
+          .get();
 
-      const sweeps = snapshot.docs.map(doc => doc.data());
-      res.json({ success: true, sweeps });
+        const sweeps = snapshot.docs.map(doc => doc.data());
+        res.json({ success: true, sweeps });
+      } catch (dbErr) {
+        // Fallback to in-memory sweeps if database permissions error or get() fails
+        res.json({ success: true, sweeps: inMemoryStrategySweeps.slice(0, 10) });
+      }
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to fetch strategy sweeps" });
+      res.json({ success: true, sweeps: inMemoryStrategySweeps.slice(0, 10) });
     }
   });
 

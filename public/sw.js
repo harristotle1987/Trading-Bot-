@@ -41,8 +41,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip caching for non-GET requests or WebSocket/API routes
+  // Skip caching for non-GET requests, non-http protocols, or WebSocket/API routes
   if (event.request.method !== 'GET') return;
+  if (!url.protocol.startsWith('http')) return; // Ignore chrome-extension or other protocols
   if (url.pathname.startsWith('/api/') || url.hostname.includes('pusher.com') || url.hostname.includes('binance.com')) {
     return; // Direct network for live APIs & real-time sockets
   }
