@@ -44,10 +44,9 @@ export function usePWA() {
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('[PWA] New update installed! Activating auto-update...');
+                console.log('[PWA] New update installed! Available on next launch.');
                 setIsUpdateAvailable(true);
-                // Trigger auto update for all devices
-                newWorker.postMessage({ type: 'SKIP_WAITING' });
+                toast.info('A new update is available. It will be applied the next time you open the app, or you can refresh manually.', { duration: 6000 });
               }
             });
           }
@@ -61,22 +60,9 @@ export function usePWA() {
       }).catch((err) => {
         console.warn('[PWA] SW registration failed:', err);
       });
-
-      // Auto reload on SW controllerchange (seamless instant update when pushed)
-      let refreshing = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-          refreshing = true;
-          console.log('[PWA] Controller changed! Auto-updating app...');
-          toast.info('New update deployed! Refreshing application...', { duration: 5000 });
-          setTimeout(() => {
-            window.location.reload();
-          }, 800);
-        }
-      });
     }
 
-    // 3. Backend version polling for instant auto-update when pushed to GitHub
+    // 3. Backend version polling for instant version change detection
     let initialVersion: string | null = null;
     const checkServerVersion = async () => {
       try {
@@ -88,14 +74,8 @@ export function usePWA() {
               initialVersion = data.version;
               setCurrentVersion(data.version);
             } else if (initialVersion !== data.version) {
-              console.log(`[PWA] Server version update detected (${initialVersion} -> ${data.version}). Refreshing...`);
-              toast.success('App updated! Reloading newest build...', { duration: 5000 });
-              if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
-              }
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+              console.log(`[PWA] Server version update detected (${initialVersion} -> ${data.version}).`);
+              toast.info('New app version detected. You can refresh manually to apply the changes.', { duration: 6000 });
             }
           }
         }
