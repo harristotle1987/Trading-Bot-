@@ -47,7 +47,7 @@ export async function runMultiStrategySweep(symbol: string = 'BTCUSDT', timefram
     if (data.success) {
       toast.success('Sweep running in background... You can close this tab', {
         id: toastId,
-        duration: 4500,
+        duration: 5000,
         description: `Analyzing 500+ OHLCV bars across 5 strategy algorithms for ${symbol}.`
       });
       return data.sweepId;

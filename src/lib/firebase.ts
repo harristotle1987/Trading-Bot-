@@ -18,6 +18,8 @@ if (!projectId) {
     projectId = "trading-bot-backend-ce93e";
 }
 
+let hasValidCredentials = false;
+
 if (!getApps().length) {
     let credential;
     if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -27,26 +29,47 @@ if (!getApps().length) {
             if (serviceAccount.project_id) {
                 projectId = serviceAccount.project_id;
             }
+            hasValidCredentials = true;
         } catch (e) {
-            console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not a valid JSON object. Expected a full Service Account JSON key from Firebase Console.');
+            console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not a valid JSON object.');
         }
+    } else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        hasValidCredentials = true;
     }
 
     try {
-        initializeApp({
-            ...(credential ? { credential } : {}),
-            projectId,
-        });
-        console.log('Firebase Admin initialized with projectId:', projectId);
+        if (hasValidCredentials) {
+            initializeApp({
+                ...(credential ? { credential } : {}),
+                projectId,
+            });
+            console.log('Firebase Admin initialized with projectId:', projectId);
+        } else {
+            console.log('ℹ️ No FIREBASE_SERVICE_ACCOUNT found. Operating in-memory mode without Firestore.');
+        }
     } catch (e) {
-        console.error('Failed to initialize Firebase Admin:', e);
+        console.warn('Failed to initialize Firebase Admin:', e);
+    }
+} else {
+    hasValidCredentials = true;
+}
+
+const currentApp = (getApps().length && hasValidCredentials) ? getApp() : null;
+
+let dbInstance = null;
+let authInstance = null;
+
+if (currentApp) {
+    try {
+        dbInstance = getFirestore(currentApp);
+        authInstance = getAuth(currentApp);
+    } catch (e) {
+        console.warn('Firestore/Auth init skipped:', e);
     }
 }
 
-const currentApp = getApps().length ? getApp() : null;
-
-export const adminDb = currentApp ? getFirestore(currentApp) : null;
-export const adminAuth = currentApp ? getAuth(currentApp) : null;
+export const adminDb = dbInstance;
+export const adminAuth = authInstance;
 
 export async function initFirebaseAdmin() {
     return { db: adminDb, auth: adminAuth };

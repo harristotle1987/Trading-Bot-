@@ -20,11 +20,11 @@ export function PWAInstallNotification() {
       <AnimatePresence>
         {showAndroidPrompt && (
           <motion.div
-            initial={{ opacity: 0, y: -15, scale: 0.95 }}
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -15, scale: 0.95 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
             transition={{ duration: 0.3, ease: 'easeOut' }}
-            className="fixed top-[62px] right-2 sm:right-12 z-[9999] w-[310px] max-w-[92vw] bg-[#12161D] border-2 border-[#3DDBD9] rounded-xl p-3 shadow-2xl shadow-[#3DDBD9]/25 flex flex-col gap-2 relative overflow-hidden"
+            className="fixed top-2.5 right-2 sm:right-16 z-[9999] w-[300px] max-w-[92vw] bg-[#12161D] border-2 border-[#3DDBD9] rounded-xl p-2.5 shadow-2xl shadow-[#3DDBD9]/30 flex flex-col gap-1.5 relative overflow-hidden"
           >
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
