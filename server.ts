@@ -43,6 +43,12 @@ async function startServer() {
   const PORT = 3000;
 
   // API Routes
+  
+  // PWA Auto-Update Version Endpoint
+  const SERVER_BUILD_VERSION = `v1.1.0-${Date.now()}`;
+  app.get("/api/pwa/version", (req, res) => {
+    res.json({ version: SERVER_BUILD_VERSION, timestamp: Date.now() });
+  });
 
   app.all("/api/engine/tick", async (req, res) => {
       console.log("Engine tick triggered by CRON");
