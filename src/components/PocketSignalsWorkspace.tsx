@@ -56,7 +56,7 @@ export default function PocketSignalsWorkspace({
 }) {
   const [signals, setSignals] = useState<PocketSignal[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedStrategyId, setSelectedStrategyId] = useState<string>(initialStrategyId || 'day-trading');
+  const [selectedStrategyIds, setSelectedStrategyIds] = useState<string[]>([initialStrategyId || 'day-trading']);
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>(initialTimeframe || '15m');
   const [selectedAssetType, setSelectedAssetType] = useState<string>('ALL');
   const [minWinRate, setMinWinRate] = useState<number>(85);
@@ -71,7 +71,10 @@ export default function PocketSignalsWorkspace({
 
   const { prices } = useRealtimeData('prices');
 
-  const selectedStrategyConfig = TRADING_STRATEGIES.find(s => s.id === selectedStrategyId) || TRADING_STRATEGIES[0];
+  // Multi-strategy configurations
+  const selectedStrategyConfigs = TRADING_STRATEGIES.filter(s => selectedStrategyIds.includes(s.id));
+  const selectedStrategyConfig = selectedStrategyConfigs[0] || TRADING_STRATEGIES[0];
+  const activeStrategyNames = selectedStrategyConfigs.map(s => s.name).join(' + ');
 
   // Sound generator helper
   const playSignalBeep = useCallback((isCall: boolean, isWinResolution = false) => {
@@ -207,7 +210,7 @@ export default function PocketSignalsWorkspace({
 
   useEffect(() => {
     fetchSignals();
-  }, [fetchSignals, selectedStrategyId, selectedTimeframe]);
+  }, [fetchSignals, selectedStrategyIds, selectedTimeframe]);
 
   // 1-Second Tick Loop for Real-time Price Updates, Countdown Timers & Win Resolutions
   useEffect(() => {
@@ -503,20 +506,32 @@ export default function PocketSignalsWorkspace({
             <label className="text-xs font-bold text-[#E6E9EF] flex items-center gap-2">
               <Sliders size={15} className="text-[#3DDBD9]" /> Active Strategy Model (7 Algorithms)
             </label>
-            <span className="text-[11px] text-[#838C9C] font-mono">
-              Selected: <strong className="text-[#3DDBD9]">{selectedStrategyConfig.name}</strong>
+            <span className="text-[11px] text-[#838C9C] font-mono whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px] md:max-w-[400px]" title={activeStrategyNames}>
+              Selected: <strong className="text-[#3DDBD9]">{activeStrategyNames}</strong>
             </span>
           </div>
 
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
             {TRADING_STRATEGIES.map(strat => {
-              const isSelected = strat.id === selectedStrategyId;
+              const isSelected = selectedStrategyIds.includes(strat.id);
               return (
                 <button
                   key={strat.id}
                   onClick={() => {
-                    setSelectedStrategyId(strat.id);
-                    setSelectedTimeframe(strat.recommendedTimeframe);
+                    let nextIds;
+                    if (isSelected) {
+                      if (selectedStrategyIds.length === 1) {
+                        toast.error("At least 1 strategy must be selected");
+                        return;
+                      }
+                      nextIds = selectedStrategyIds.filter(id => id !== strat.id);
+                    } else {
+                      nextIds = [...selectedStrategyIds, strat.id];
+                    }
+                    setSelectedStrategyIds(nextIds);
+                    if (!isSelected && selectedStrategyIds.length === 1) {
+                        setSelectedTimeframe(strat.recommendedTimeframe);
+                    }
                   }}
                   className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 whitespace-nowrap transition-all border ${
                     isSelected
@@ -815,7 +830,7 @@ export default function PocketSignalsWorkspace({
                   </button>
 
                   <button
-                    onClick={() => onNavigateToChart && onNavigateToChart(sig.symbol.replace('-OTC', ''))}
+                    onClick={() => onNavigateToChart && onNavigateToChart(sig.symbol.replace(/[^A-Za-z0-9]/g, '').replace('OTC', '-OTC'))}
                     className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#3DDBD9] to-[#00E676] text-[#0B0E13] font-bold text-xs flex items-center justify-center gap-1.5 hover:opacity-90 transition-all shadow-md"
                   >
                     <BarChart2 size={14} />

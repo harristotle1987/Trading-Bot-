@@ -174,7 +174,7 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                     <td className="p-3.5 font-bold text-[#838C9C]">{log.id}</td>
                     <td 
                       className="p-3.5 font-bold text-[#E6E9EF] hover:text-[#3DDBD9] cursor-pointer"
-                      onClick={() => onNavigateToChart && onNavigateToChart(log.symbol.replace(" (OTC)", "").replace("/", ""))}
+                      onClick={() => onNavigateToChart && onNavigateToChart(log.symbol.replace(/[^A-Za-z0-9]/g, '').replace('OTC', '-OTC'))}
                     >
                       {log.symbol}
                     </td>

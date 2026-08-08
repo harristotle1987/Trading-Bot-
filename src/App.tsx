@@ -28,11 +28,18 @@ export const TRADABLE_PAIRS = [
 
     // Forex & OTC
     { symbol: "EURUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "EURUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "GBPUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "GBPUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "USDJPY-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "AUDUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "AUDUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDCAD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "USDCAD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDCHF", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "EURGBP-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "GBPJPY-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
 
     // Commodities & Metals
     { symbol: "XAUUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },

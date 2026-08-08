@@ -5,6 +5,7 @@ import {
   TrendingUp, TrendingDown, Target, Activity, Settings2, Info
 } from 'lucide-react';
 import { TRADING_STRATEGIES, ALL_TIMEFRAMES, StrategyConfig } from '../data/strategies';
+import StrategySweepDashboard, { TriggerSweepButton } from './StrategySweepDashboard';
 import { toast } from 'sonner';
 
 interface StrategyStudioWorkspaceProps {
@@ -77,7 +78,8 @@ export default function StrategyStudioWorkspace({
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <TriggerSweepButton symbol="BTCUSDT" timeframe={selectedTimeframe} />
             <button
               onClick={handleRunBacktest}
               disabled={isSimulating}
@@ -95,6 +97,9 @@ export default function StrategyStudioWorkspace({
           </div>
         </div>
       </div>
+
+      {/* MULTI-STRATEGY SWEEP DASHBOARD */}
+      <StrategySweepDashboard selectedSymbol="BTCUSDT" selectedTimeframe={selectedTimeframe} />
 
       {/* Strategy Cards Grid */}
       <div className="space-y-3">

@@ -1,6 +1,6 @@
 {
-  "name": "Pocket Option Signal Bot",
-  "description": "High-precision Pocket Option binary options signal bot with live CALL/PUT indicators, expiry filters, OTC payout tracking, and 1-click signal copy.",
+  "name": "Avartahs Bot",
+  "description": "High-precision AI signal bot powered by NVIDIA NIM, multi-strategy sweep engines, and real-time market confluence analysis.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

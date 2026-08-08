@@ -229,7 +229,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Demo Order
   const executeDemoTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const livePrice = prices[pair.symbol] || pair.suggested_entry || 100;
+      const livePrice = prices[pair.symbol] || prices[pair.symbol.replace('-OTC', '')] || pair.suggested_entry || 100;
       const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/demo/place-order", {
         method: "POST",
@@ -264,7 +264,7 @@ export default function InteractiveChartsWorkspace({ initialSymbol }: { initialS
   // Execute 1-Click Live Order
   const executeLiveTrade = async (pair: RecommendedPair, amount: number) => {
     try {
-      const livePrice = prices[pair.symbol] || pair.suggested_entry || 100;
+      const livePrice = prices[pair.symbol] || prices[pair.symbol.replace('-OTC', '')] || pair.suggested_entry || 100;
       const qty = parseFloat((amount / livePrice).toFixed(4));
       const res = await fetch("/api/agent-workspace/live/place-order", {
         method: "POST",
@@ -422,7 +422,7 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
       const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category === 'forex';
       const category = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.category || "crypto";
 
-      const cleanSymbol = selectedSymbol.replace(/[\/-]/g, '').toUpperCase();
+      const cleanSymbol = selectedSymbol.replace(/[\/-]/g, '').replace('OTC', '').toUpperCase();
       let binanceWsSymbol = cleanSymbol.toLowerCase();
       if (!binanceWsSymbol.endsWith("usdt") && (category === "crypto" || cleanSymbol.includes("USDT") || ["BTC", "ETH", "SOL", "XRP", "BNB", "ADA", "DOGE", "AVAX", "LINK", "DOT", "NEAR", "SUI", "APT", "MATIC", "LTC", "UNI", "ATOM", "ETC", "FIL", "ARB", "PEPE", "SHIB", "INJ", "RNDR", "OP", "TIA", "AAVE", "FET", "WIF"].includes(cleanSymbol))) {
           binanceWsSymbol += "usdt";
@@ -1035,28 +1035,13 @@ const isForex = TRADABLE_PAIRS.find((p: any) => p.symbol === selectedSymbol)?.ca
                   </div>
 
                   {/* Actions */}
-                  <div className="flex gap-2">
+                  <div>
                     <button
                       onClick={() => handleSelectPair(item.symbol)}
-                      className="flex-1 py-1.5 bg-[#1F2833] hover:bg-[#3DDBD9] hover:text-[#0B0C10] text-white text-xs font-bold font-mono rounded transition-colors"
+                      className="w-full py-1.5 bg-[#1F2833] hover:bg-[#3DDBD9] hover:text-[#0B0C10] text-white text-xs font-bold font-mono rounded transition-colors"
                     >
                       View Chart
                     </button>
-                    {activeMode === "DEMO" ? (
-                      <button
-                        onClick={() => setTradeModal({ isOpen: true, pair: item, amount: 100, mode: "DEMO" })}
-                        className={`flex-1 py-1.5 text-[#0B0C10] font-bold text-xs font-mono rounded transition-colors shadow-sm ${item.directional_bias.includes("BUY") ? "bg-[#00E676] hover:bg-[#66FCF1]" : "bg-[#FF1744] text-white hover:bg-[#ff4d6d]"}`}
-                      >
-                        Demo {item.directional_bias.includes("BUY") ? "Buy" : "Sell"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setTradeModal({ isOpen: true, pair: item, amount: 100, mode: "LIVE" })}
-                        className={`flex-1 py-1.5 text-[#0B0C10] font-bold text-xs font-mono rounded transition-colors shadow-sm ${item.directional_bias.includes("BUY") ? "bg-[#00E676] hover:bg-[#66FCF1]" : "bg-[#FF1744] text-white hover:bg-[#ff4d6d]"}`}
-                      >
-                        Live {item.directional_bias.includes("BUY") ? "Buy" : "Sell"}
-                      </button>
-                    )}
                   </div>
                 </div>
               ))

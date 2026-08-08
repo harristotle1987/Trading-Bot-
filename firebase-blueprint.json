@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "StrategySweep": {
+      "title": "StrategySweep",
+      "description": "Multi-strategy backtest sweep result and AI market recommendation",
+      "type": "object",
+      "properties": {
+        "sweepId": {
+          "type": "string",
+          "description": "Unique identifier for the sweep job"
+        },
+        "symbol": {
+          "type": "string",
+          "description": "Trading pair symbol e.g. BTCUSDT"
+        },
+        "timeframe": {
+          "type": "string",
+          "description": "Timeframe e.g. 15m, 1h"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["processing", "completed", "failed"],
+          "description": "Job status"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Timestamp when sweep job was created"
+        },
+        "completedAt": {
+          "type": "number",
+          "description": "Timestamp when sweep job was completed"
+        },
+        "winningStrategy": {
+          "type": "string",
+          "description": "Name of best performing strategy"
+        },
+        "winRate": {
+          "type": "number",
+          "description": "Win rate of winning strategy"
+        },
+        "recommendation": {
+          "type": "object",
+          "description": "AI recommendation details including action, entry, tp, sl, reasoning"
+        },
+        "allStrategyMetrics": {
+          "type": "array",
+          "description": "Metrics array for all 5 tested strategies"
+        }
+      },
+      "required": ["sweepId", "symbol", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "strategy_sweeps/{sweepId}": {
+      "schema": "StrategySweep",
+      "description": "Stores offline multi-strategy backtest sweep jobs and AI recommendations"
+    }
+  }
+}

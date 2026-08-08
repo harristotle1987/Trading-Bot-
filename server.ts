@@ -11,6 +11,7 @@ import fs from "fs";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { adminDb as db, initFirebaseAdmin } from "./src/lib/firebase";
+import { executeStrategySweep } from "./src/lib/strategySweepEngine";
 import { CTraderConnection } from "@reiryoku/ctrader-layer";
 
 dotenv.config();
@@ -713,6 +714,45 @@ const updatePrices = async () => {
     res.json(agentState);
   });
 
+  // Offline Multi-Strategy Sweep API Route
+  app.post("/api/agent/strategy-sweep", express.json(), async (req, res) => {
+    try {
+      const symbol = req.body?.symbol || "BTCUSDT";
+      const timeframe = req.body?.timeframe || "15m";
+
+      const sweepId = await executeStrategySweep(symbol, timeframe);
+
+      res.json({
+        success: true,
+        sweepId,
+        symbol,
+        timeframe,
+        status: "processing",
+        message: "Multi-Strategy Sweep job started in background... You can close this tab"
+      });
+    } catch (err: any) {
+      console.error("Strategy sweep API error:", err);
+      res.status(500).json({ success: false, error: err?.message || "Failed to initiate strategy sweep" });
+    }
+  });
+
+  app.get("/api/agent/strategy-sweep/latest", async (req, res) => {
+    try {
+      if (!db) {
+        return res.status(500).json({ error: "Firestore DB not initialized" });
+      }
+      const snapshot = await db.collection("strategy_sweeps")
+        .orderBy("createdAt", "desc")
+        .limit(10)
+        .get();
+
+      const sweeps = snapshot.docs.map(doc => doc.data());
+      res.json({ success: true, sweeps });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Failed to fetch strategy sweeps" });
+    }
+  });
+
   // Phase 9: Sentiment & Macro Events Mocks
   app.get("/api/sentiment/latest/:symbol", (req, res) => {
     const symbol = req.params.symbol;
@@ -1080,6 +1120,57 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
           ? `MULTI-STRATEGY CONFLUENCE ENGINE: Combine and synthesize signals from [${combinedStrategyRules}]. Only trigger if strategies confirm directional alignment.`
           : (strategyRulesMap[primaryStrategy] || `Apply ${primaryStrategy} strategy`);
 
+      // Try NVIDIA NIM API First
+      if (apiKey && apiKey.trim().length > 5) {
+          try {
+              const aiRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${apiKey}`
+                  },
+                  body: JSON.stringify({
+                      model: "meta/llama-3.3-70b-instruct",
+                      messages: [{
+                          role: "user",
+                          content: `Analyze pair ${targetSymbol} at price ${currentPrice}. Active Strategy Combination: "${strategyPromptInstruction}". Provide high-precision signal decision. Respond ONLY with valid JSON: {"win_rate_probability": ${analytics.finalWinRate}, "directional_bias": "BUY", "reasoning": "Explain multi-strategy confluence."}`
+                      }],
+                      max_tokens: 220,
+                      temperature: 0.2
+                  }),
+                  signal: AbortSignal.timeout(10000)
+              });
+
+              if (aiRes.ok) {
+                  const data = await aiRes.json();
+                  const reply = data.choices?.[0]?.message?.content || "";
+                  const match = reply.match(/\{.*\}/s);
+                  if (match) {
+                      const aiResult = JSON.parse(match[0]);
+                      const bias = aiResult.directional_bias || "BUY";
+                      const isSwingInvolved = strategyList.includes("SWING_TRADING");
+                      const tpMultiplier = isSwingInvolved ? (bias === "BUY" ? 1.055 : 0.945) : (bias === "BUY" ? 1.03 : 0.97);
+                      const slMultiplier = isSwingInvolved ? (bias === "BUY" ? 0.978 : 1.022) : (bias === "BUY" ? 0.985 : 1.015);
+                      return res.json({
+                          symbol: targetSymbol,
+                          strategy_used: isMultiStrategy ? `COMBO (${strategyList.join(" + ")})` : primaryStrategy,
+                          strategies_combined: strategyList,
+                          win_rate_probability: aiResult.win_rate_probability || analytics.finalWinRate,
+                          directional_bias: bias,
+                          composite_analytics: analytics,
+                          reasoning: aiResult.reasoning || `NVIDIA NIM AI Quantitative Engine confirms ${isMultiStrategy ? 'multi-strategy confluence' : primaryStrategy} setup on ${targetSymbol}.`,
+                          suggested_entry: parseFloat(currentPrice.toFixed(decimalPlaces)),
+                          suggested_tp: parseFloat((currentPrice * tpMultiplier).toFixed(decimalPlaces)),
+                          suggested_sl: parseFloat((currentPrice * slMultiplier).toFixed(decimalPlaces))
+                      });
+                  }
+              }
+          } catch (err) {
+              console.warn("NVIDIA API endpoint error in evaluate-pair:", err);
+          }
+      }
+
+      // Secondary Fallback: Gemini API
       if (gemini) {
           try {
               const response = await gemini.models.generateContent({
@@ -1109,55 +1200,6 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
               }
           } catch (err) {
               // Fall through silently
-          }
-      }
-
-      if (apiKey && apiKey.trim().length > 5) {
-          try {
-              const aiRes = await fetch("https://integrate.api.nvidia.com/v1/chat/completions", {
-                  method: "POST",
-                  headers: {
-                      "Content-Type": "application/json",
-                      "Authorization": `Bearer ${apiKey}`
-                  },
-                  body: JSON.stringify({
-                      model: "meta/llama-3.1-70b-instruct",
-                      messages: [{
-                          role: "user",
-                          content: `Analyze pair ${targetSymbol} at price ${currentPrice}. Active Strategy Combination: "${strategyPromptInstruction}". Provide signal decision. Respond ONLY with valid JSON: {"win_rate_probability": ${analytics.finalWinRate}, "directional_bias": "BUY", "reasoning": "Explain multi-strategy confluence."}`
-                      }],
-                      max_tokens: 220,
-                      temperature: 0.2
-                  }),
-                  signal: AbortSignal.timeout(2000)
-              });
-
-              if (aiRes.ok) {
-                  const data = await aiRes.json();
-                  const reply = data.choices[0].message.content;
-                  const match = reply.match(/\{.*\}/s);
-                  if (match) {
-                      const aiResult = JSON.parse(match[0]);
-                      const bias = aiResult.directional_bias || "BUY";
-                      const isSwingInvolved = strategyList.includes("SWING_TRADING");
-                      const tpMultiplier = isSwingInvolved ? (bias === "BUY" ? 1.055 : 0.945) : (bias === "BUY" ? 1.03 : 0.97);
-                      const slMultiplier = isSwingInvolved ? (bias === "BUY" ? 0.978 : 1.022) : (bias === "BUY" ? 0.985 : 1.015);
-                      return res.json({
-                          symbol: targetSymbol,
-                          strategy_used: isMultiStrategy ? `COMBO (${strategyList.join(" + ")})` : primaryStrategy,
-                          strategies_combined: strategyList,
-                          win_rate_probability: aiResult.win_rate_probability || analytics.finalWinRate,
-                          directional_bias: bias,
-                          composite_analytics: analytics,
-                          reasoning: aiResult.reasoning || `NVIDIA AI model confirms ${isMultiStrategy ? 'multi-strategy confluence' : primaryStrategy} setup on ${targetSymbol}.`,
-                          suggested_entry: parseFloat(currentPrice.toFixed(decimalPlaces)),
-                          suggested_tp: parseFloat((currentPrice * tpMultiplier).toFixed(decimalPlaces)),
-                          suggested_sl: parseFloat((currentPrice * slMultiplier).toFixed(decimalPlaces))
-                      });
-                  }
-              }
-          } catch (err) {
-              // Dynamic engine fallback
           }
       }
 
@@ -1833,12 +1875,12 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                model: "meta/llama-3.1-70b-instruct",
+                model: "meta/llama-3.3-70b-instruct",
                 messages: [{ role: "user", content: prompt }],
                 temperature: 0.1,
                 response_format: { type: "json_object" }
             }),
-            signal: AbortSignal.timeout(3500)
+            signal: AbortSignal.timeout(10000)
         });
         
         const data = await response.json();
@@ -2031,13 +2073,14 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
     try {
       const { category, symbol, interval, limit } = req.query;
       
-      const isForex = typeof symbol === 'string' && ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'EURAUD', 'GBPCAD', 'CADJPY', 'CHFJPY'].includes(symbol);
+      const cleanSymbol = typeof symbol === 'string' ? symbol.replace('-OTC', '').replace(' (OTC)', '') : '';
+      const isForex = typeof cleanSymbol === 'string' && ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCAD', 'USDCHF', 'NZDUSD', 'EURGBP', 'EURJPY', 'GBPJPY', 'AUDJPY', 'EURAUD', 'GBPCAD', 'CADJPY', 'CHFJPY'].includes(cleanSymbol);
       
       let parsedLimit = parseInt(limit as string) || 500;
       if (parsedLimit > 1000) parsedLimit = 1000;
 
       if (isForex || category === 'stocks') {
-          const yahooSymbol = isForex ? `${symbol}=X` : (symbol as string);
+          const yahooSymbol = isForex ? `${cleanSymbol}=X` : (cleanSymbol as string);
           let yahooInterval = "5m";
           let yahooRange = "1d";
 
@@ -2373,7 +2416,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                               "Authorization": `Bearer ${apiKey}`
                           },
                           body: JSON.stringify({
-                              model: "meta/llama-3.1-70b-instruct",
+                              model: "meta/llama-3.3-70b-instruct",
                               messages: [{
                                   role: "user",
                                   content: `The current price of ${symbol} is ${prices[symbol]}. News Sentiment: ${newsSentiment}. Should I BUY or SELL for a quick scalp trade? Respond with a JSON object like {"action": "BUY", "confidence": 90} or {"action": "HOLD", "confidence": 0}.`
@@ -2381,7 +2424,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
                               max_tokens: 100,
                               temperature: 0.2
                           }),
-                          signal: AbortSignal.timeout(2000)
+                          signal: AbortSignal.timeout(8000)
                       });
 
                       if (aiRes.ok) {

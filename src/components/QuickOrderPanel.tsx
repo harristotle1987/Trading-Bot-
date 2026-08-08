@@ -75,7 +75,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
 
         // Fallback analysis if fetch returns non-200 or network issues occur
         const isCall = Math.random() > 0.45;
-        const entryP = prices[symbolToAnalyze] || 1.0850;
+        const entryP = prices[symbolToAnalyze] || prices[symbolToAnalyze.replace('-OTC', '')] || 1.0850;
         setAiAnalysis({
             symbol: symbolToAnalyze,
             directional_bias: isCall ? 'BUY' : 'SELL',
@@ -118,7 +118,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
 
         const randomPair = TRADABLE_PAIRS[Math.floor(Math.random() * TRADABLE_PAIRS.length)]?.symbol || "EURUSD";
         const isCall = Math.random() > 0.48;
-        const entryP = prices[randomPair] || 1.0850;
+        const entryP = prices[randomPair] || prices[randomPair.replace('-OTC', '')] || 1.0850;
         const fallbackData = {
             symbol: randomPair,
             directional_bias: isCall ? 'BUY' : 'SELL',
