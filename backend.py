@@ -3,8 +3,8 @@ import json
 import os
 import sys
 
-PORT = 8000
-DATA_FILE = "pocket_settings.json"
+PORT = 8088
+DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pocket_settings.json")
 
 # Load initial settings
 def load_settings():
@@ -61,6 +61,42 @@ class PocketSettingsHandler(http.server.BaseHTTPRequestHandler):
             
             settings = load_settings()
             self.wfile.write(json.dumps(settings).encode("utf-8"))
+        elif self.path == "/stats" or self.path == "/api/pocket-option/stats":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self._send_cors_headers()
+            self.end_headers()
+            
+            settings = load_settings()
+            saved_count = len(settings.get("savedSignals", []))
+            stats = {
+                "status": "online",
+                "backend": "Python 3.11 BaseHTTPRequestHandler",
+                "data_file": DATA_FILE,
+                "saved_signals_count": saved_count,
+                "current_lot_size": settings.get("lotSize", 1.0),
+                "current_timeframe": settings.get("selectedTimeframe", "30m"),
+                "last_signal_generated": settings.get("signalGeneratorSettings", {}).get("generatedAt", "N/A")
+            }
+            self.wfile.write(json.dumps(stats).encode("utf-8"))
+        elif self.path == "/export" or self.path == "/api/pocket-option/export":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Disposition", 'attachment; filename="pocket_option_audit_export.json"')
+            self._send_cors_headers()
+            self.end_headers()
+            
+            settings = load_settings()
+            export_payload = {
+                "system": "Pocket Option AI Trading Engine",
+                "exportedAt": str(os.popen("date").read()).strip(),
+                "lotSize": settings.get("lotSize", 1.0),
+                "timeframe": settings.get("selectedTimeframe", "30m"),
+                "activeStrategies": settings.get("selectedStrategies", []),
+                "savedSignals": settings.get("savedSignals", []),
+                "lastSignalGenerator": settings.get("signalGeneratorSettings", {})
+            }
+            self.wfile.write(json.dumps(export_payload, indent=2).encode("utf-8"))
         else:
             self.send_response(404)
             self.end_headers()
@@ -91,9 +127,20 @@ class PocketSettingsHandler(http.server.BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-def run(server_class=http.server.HTTPServer, handler_class=PocketSettingsHandler):
+class ReusableHTTPServer(http.server.HTTPServer):
+    allow_reuse_address = True
+
+def run():
     server_address = ('0.0.0.0', PORT)
-    httpd = server_class(server_address, handler_class)
+    try:
+        httpd = ReusableHTTPServer(server_address, PocketSettingsHandler)
+    except OSError as e:
+        if getattr(e, 'errno', None) == 98 or "Address already in use" in str(e):
+            print(f"[Python] Settings backend port {PORT} already bound/in use. Reusing active backend process.", flush=True)
+            sys.exit(0)
+        else:
+            raise e
+
     print(f"[Python] Settings backend listening on port {PORT}...", flush=True)
     try:
         httpd.serve_forever()

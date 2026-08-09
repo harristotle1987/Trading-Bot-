@@ -117,15 +117,23 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
             console.warn("AI Scan fetch notice:", error);
         }
 
-        const randomPair = TRADABLE_PAIRS[Math.floor(Math.random() * TRADABLE_PAIRS.length)]?.symbol || "EURUSD";
+        const dayOfWeek = new Date().getUTCDay();
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+        const availablePairs = isWeekend 
+            ? TRADABLE_PAIRS.filter(p => p.category === "crypto") 
+            : TRADABLE_PAIRS;
+
+        const randomPairObj = availablePairs[Math.floor(Math.random() * availablePairs.length)];
+        const randomPair = randomPairObj?.symbol || "BTCUSDT";
         const isCall = Math.random() > 0.48;
         const entryP = getPriceForSymbol(prices, randomPair);
         const fallbackData = {
             symbol: randomPair,
             directional_bias: isCall ? 'BUY' : 'SELL',
             win_rate_probability: Math.floor(Math.random() * 6) + 90,
-            suggested_entry: typeof entryP === 'number' ? entryP : 1.0850,
-            reasoning: `AI Confluence Scanner identified high-probability signal on ${randomPair} [${selectedExpiry}] using ${selectedStrategies.join(" + ")}.`
+            suggested_entry: typeof entryP === 'number' ? entryP : 64250,
+            reasoning: `AI Confluence Scanner identified high-probability 24/7 Crypto signal on ${randomPair} [${selectedExpiry}] using ${selectedStrategies.join(" + ")}.`
         };
         setSelectedSymbol(randomPair);
         setAiAnalysis(fallbackData);

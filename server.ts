@@ -43,14 +43,25 @@ async function startServer() {
   await initFirebaseAdmin();
 
   // Automatically start the Python settings backend
-  console.log("[Node] Booting Python settings backend...");
-  const pythonBackend = spawn("python3", ["backend.py"], { stdio: "inherit" });
+  console.log("[Node] Booting Python settings backend on port 8088...");
+  const pythonBackend = spawn("python3", ["backend.py"], { stdio: "inherit", cwd: process.cwd() });
   pythonBackend.on("error", (err) => {
     console.error("[Node] Failed to start Python backend:", err);
   });
   pythonBackend.on("exit", (code) => {
-    console.warn(`[Node] Python settings backend exited with code ${code}`);
+    if (code !== 0 && code !== null) {
+      console.warn(`[Node] Python settings backend exited with code ${code}`);
+    }
   });
+
+  const killPython = () => {
+    if (pythonBackend && !pythonBackend.killed) {
+      try { pythonBackend.kill(); } catch (e) {}
+    }
+  };
+  process.on("exit", killPython);
+  process.on("SIGINT", killPython);
+  process.on("SIGTERM", killPython);
 
   const PORT = 3000;
 
@@ -1363,10 +1374,10 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     }
   });
 
-  // POCKET OPTION SETTINGS PERSISTENCE (PROXIED TO PYTHON BACKEND ON PORT 8000)
+  // POCKET OPTION SETTINGS PERSISTENCE (PROXIED TO PYTHON BACKEND ON PORT 8088)
   app.get("/api/pocket-option/load-settings", async (req, res) => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/load");
+      const response = await fetch("http://127.0.0.1:8088/load");
       if (response.ok) {
         const data = await response.json();
         res.json(data);
@@ -1387,7 +1398,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
 
   app.post("/api/pocket-option/save-settings", async (req, res) => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/save", {
+      const response = await fetch("http://127.0.0.1:8088/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(req.body)
@@ -1404,21 +1415,62 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     }
   });
 
+  app.get("/api/pocket-option/stats", async (req, res) => {
+    try {
+      const response = await fetch("http://127.0.0.1:8088/stats");
+      if (response.ok) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        res.status(500).json({ status: "error", message: "Python backend error" });
+      }
+    } catch (e: any) {
+      res.status(503).json({ status: "offline", message: e.message });
+    }
+  });
+
+  app.get("/api/pocket-option/export", async (req, res) => {
+    try {
+      const response = await fetch("http://127.0.0.1:8088/export");
+      if (response.ok) {
+        const data = await response.json();
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Content-Disposition", 'attachment; filename="pocket_option_audit_export.json"');
+        res.json(data);
+      } else {
+        res.status(500).json({ error: "Export failed from Python backend" });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   // POCKET OPTION SIGNALS API
   app.get("/api/pocket-option/signals", (req, res) => {
     const activeStrategy = (req.query.strategy as string) || "Day Trading";
     const reqTimeframe = (req.query.timeframe as string) || "30m";
 
-    const basePairs = [
+    // Weekend Market Hours Check (Saturday & Sunday UTC)
+    const dayOfWeek = new Date().getUTCDay(); // 0 = Sunday, 6 = Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    let basePairs = [
       { symbol: "EUR/USD", cleanSym: "EURUSD", isOtc: false, category: "forex", payout: 92, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 94, strategy: activeStrategy, ind: ["RSI (26) Oversold", "EMA 8/21 Cross", "Support Bounce"] },
       { symbol: "GBP/USD", cleanSym: "GBPUSD", isOtc: false, category: "forex", payout: 92, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 91, strategy: activeStrategy, ind: ["Bollinger Upper Rejection", "RSI (72) Overbought"] },
       { symbol: "BTC/USDT", cleanSym: "BTCUSDT", isOtc: false, category: "crypto", payout: 85, expiry: reqTimeframe || "5m", dir: "CALL", winRate: 93, strategy: activeStrategy, ind: ["Order Block FVG Mitigation", "200 EMA Support"] },
+      { symbol: "ETH/USDT", cleanSym: "ETHUSDT", isOtc: false, category: "crypto", payout: 86, expiry: reqTimeframe || "5m", dir: "CALL", winRate: 92, strategy: activeStrategy, ind: ["Volume Delta Surge", "Stochastic Cross"] },
+      { symbol: "SOL/USDT", cleanSym: "SOLUSDT", isOtc: false, category: "crypto", payout: 87, expiry: reqTimeframe || "5m", dir: "PUT", winRate: 90, strategy: activeStrategy, ind: ["MACD Bear Divergence", "3 StdDev Extension"] },
       { symbol: "USD/JPY", cleanSym: "USDJPY", isOtc: false, category: "forex", payout: 90, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 89, strategy: activeStrategy, ind: ["Band Squeeze Breakout", "Stochastic Cross"] },
       { symbol: "AUD/USD", cleanSym: "AUDUSD", isOtc: false, category: "forex", payout: 88, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 95, strategy: activeStrategy, ind: ["+1,800 Buy Imbalance", "VWAP Pullback"] },
       { symbol: "XAU/USD", cleanSym: "XAUUSD", isOtc: false, category: "commodities", payout: 88, expiry: reqTimeframe || "3m", dir: "PUT", winRate: 90, strategy: activeStrategy, ind: ["Key Resistance Pin Bar", "Bearish FVG"] },
       { symbol: "USD/CAD", cleanSym: "USDCAD", isOtc: false, category: "forex", payout: 89, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 88, strategy: activeStrategy, ind: ["MACD Bear Divergence", "3 StdDev Extension"] },
       { symbol: "EUR/GBP", cleanSym: "EURGBP", isOtc: false, category: "forex", payout: 91, expiry: reqTimeframe || "30s", dir: "CALL", winRate: 96, strategy: activeStrategy, ind: ["Micro Trend Crossover", "Volume Surge"] }
     ];
+
+    // Filter non-crypto pairs during weekends
+    if (isWeekend) {
+      basePairs = basePairs.filter(p => p.category === "crypto");
+    }
 
     const getDurationMs = (tf: string) => {
       switch (tf) {
@@ -1482,6 +1534,17 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     const { symbol, isOtc, strategyName, timeframe } = req.body || {};
     const norm = normalizeSymbol(symbol || "EURUSD");
     const cleanSym = norm || "EURUSD";
+
+    const dayOfWeek = new Date().getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isCrypto = cleanSym.includes("BTC") || cleanSym.includes("ETH") || cleanSym.includes("SOL") || cleanSym.includes("USDT");
+
+    if (isWeekend && !isCrypto) {
+      res.status(400).json({
+        error: "Forex, Stock, and Commodity markets are closed on weekends. Crypto markets (BTC, ETH, SOL) operate 24/7. Please select a Crypto asset."
+      });
+      return;
+    }
     const price = GLOBAL_PRICES[norm] || GLOBAL_PRICES[symbol as string] || (
       cleanSym.includes("BTC") ? 64250 :
       cleanSym.includes("ETH") ? 3450 :

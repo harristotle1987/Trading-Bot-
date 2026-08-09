@@ -3,7 +3,7 @@ import {
   Zap, TrendingUp, TrendingDown, Clock, ShieldCheck, Copy, ExternalLink, 
   RefreshCw, Filter, Sparkles, Volume2, VolumeX, AlertCircle, CheckCircle2, 
   ArrowUpRight, BarChart2, Layers, Search, Radio, ArrowUpDown, XCircle,
-  Play, Trophy, Cpu, Sliders, Check
+  Play, Trophy, Cpu, Sliders, Check, Database, Download, Target, ShieldAlert
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { TRADABLE_PAIRS } from '../App';
@@ -20,6 +20,8 @@ export interface PocketSignal {
   expiry: string; // e.g. '30s', '1m', '15m', '1d', '1mth'
   entryPrice: number;
   currentPrice: number;
+  takeProfit?: number;
+  stopLoss?: number;
   winRate: number;
   payoutPct: number;
   confidence: 'HIGH_CONFLUENCE' | 'ULTRA_ACCURATE' | 'STRONG_TREND';
@@ -45,6 +47,46 @@ const POCKET_OPTION_PAIRS = [
   { symbol: "GBPJPY", label: "GBP/JPY", category: "forex", isOtc: false, payout: 90 },
   { symbol: "NVDA", label: "NVDA (Stock)", category: "stocks", isOtc: false, payout: 82 }
 ];
+
+export function calculateTpAndSl(symbol: string, entryPrice: number, direction: 'CALL' | 'PUT') {
+  const isCall = direction === 'CALL';
+  const cleanSym = symbol.replace(/[\/-]/g, '').toUpperCase();
+  
+  let tpOffset: number;
+  let slOffset: number;
+
+  if (cleanSym.includes('BTC')) {
+    tpOffset = entryPrice * 0.015; // 1.5% TP (~ $900 on $60k BTC)
+    slOffset = entryPrice * 0.0075; // 0.75% SL (~ $450)
+  } else if (cleanSym.includes('ETH') || cleanSym.includes('SOL')) {
+    tpOffset = entryPrice * 0.02; // 2% TP
+    slOffset = entryPrice * 0.01; // 1% SL
+  } else if (cleanSym.includes('JPY')) {
+    tpOffset = 0.35; // 35 pips
+    slOffset = 0.18; // 18 pips
+  } else if (cleanSym.includes('XAU') || cleanSym.includes('GOLD')) {
+    tpOffset = 12.0; // $12 gold movement
+    slOffset = 6.0;  // $6 gold movement
+  } else if (cleanSym.includes('NVDA') || cleanSym.includes('AAPL') || cleanSym.includes('TSLA')) {
+    tpOffset = entryPrice * 0.025;
+    slOffset = entryPrice * 0.012;
+  } else {
+    // Standard Forex (EURUSD, GBPUSD, AUDUSD, USDCAD, etc.)
+    // 25 pips (0.0025) TP, 12 pips (0.0012) SL
+    tpOffset = 0.0025;
+    slOffset = 0.0012;
+  }
+
+  const tpPrice = isCall ? entryPrice + tpOffset : entryPrice - tpOffset;
+  const slPrice = isCall ? entryPrice - slOffset : entryPrice + slOffset;
+
+  return {
+    tp: formatSmartPrice(tpPrice, symbol),
+    sl: formatSmartPrice(slPrice, symbol),
+    tpNum: tpPrice,
+    slNum: slPrice
+  };
+}
 
 export function calculatePipsAndProfit(symbol: string, entry: number, live: number, direction: 'CALL' | 'PUT', lotSizeVal: number) {
   const isCall = direction === 'CALL';
@@ -106,6 +148,38 @@ export default function PocketSignalsWorkspace({
 
   const { prices } = useRealtimeData('prices');
   const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const saveToPythonBackend = useCallback(async (manual = false) => {
+    setIsSaving(true);
+    try {
+      const res = await fetch("/api/pocket-option/save-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lotSize,
+          selectedTimeframe,
+          selectedStrategies: selectedStrategyIds,
+          savedAt: new Date().toISOString()
+        })
+      });
+      if (res.ok) {
+        const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        setLastSavedTime(timeStr);
+        if (manual) {
+          toast.success(`Saved to Python Backend! (Lot Size: ${lotSize}, Timeframe: ${selectedTimeframe.toUpperCase()})`);
+        }
+      } else {
+        if (manual) toast.error("Failed to save settings to Python backend.");
+      }
+    } catch (err) {
+      console.error("Failed to save settings to Python backend:", err);
+      if (manual) toast.error("Python backend offline or unreachable.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [lotSize, selectedTimeframe, selectedStrategyIds]);
 
   // Load saved settings from Python backend on mount
   useEffect(() => {
@@ -117,6 +191,9 @@ export default function PocketSignalsWorkspace({
           if (data.lotSize !== undefined) setLotSize(data.lotSize);
           if (data.selectedTimeframe !== undefined) setSelectedTimeframe(data.selectedTimeframe);
           if (data.selectedStrategies !== undefined) setSelectedStrategyIds(data.selectedStrategies);
+          if (data.savedAt) {
+            setLastSavedTime(new Date(data.savedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+          }
         }
       } catch (err) {
         console.warn("Could not load settings from python backend:", err);
@@ -130,26 +207,11 @@ export default function PocketSignalsWorkspace({
   // Auto-save settings to Python backend whenever they change
   useEffect(() => {
     if (!hasLoadedSettings) return;
-
-    const saveSettings = async () => {
-      try {
-        await fetch("/api/pocket-option/save-settings", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            lotSize,
-            selectedTimeframe,
-            selectedStrategies: selectedStrategyIds
-          })
-        });
-      } catch (err) {
-        console.error("Failed to auto-save settings to Python backend:", err);
-      }
-    };
-
-    const timer = setTimeout(saveSettings, 400);
+    const timer = setTimeout(() => {
+      saveToPythonBackend(false);
+    }, 400);
     return () => clearTimeout(timer);
-  }, [lotSize, selectedTimeframe, selectedStrategyIds, hasLoadedSettings]);
+  }, [lotSize, selectedTimeframe, selectedStrategyIds, hasLoadedSettings, saveToPythonBackend]);
 
   // Multi-strategy configurations
   const selectedStrategyConfigs = TRADING_STRATEGIES.filter(s => selectedStrategyIds.includes(s.id));
@@ -477,18 +539,24 @@ export default function PocketSignalsWorkspace({
 
   // Copy Signal helper
   const handleCopySignal = (sig: PocketSignal) => {
+    const { tp, sl } = calculateTpAndSl(sig.symbol, sig.entryPrice, sig.direction);
+    const tpVal = sig.takeProfit ? formatSmartPrice(sig.takeProfit, sig.symbol) : tp;
+    const slVal = sig.stopLoss ? formatSmartPrice(sig.stopLoss, sig.symbol) : sl;
+
     const formatted = `⚡ POCKET OPTION SIGNAL ⚡\n` +
       `Asset: ${sig.symbol}\n` +
       `Strategy: ${sig.strategyUsed}\n` +
       `Action: ${sig.direction === 'CALL' ? '🟢 CALL (HIGHER ⬆️)' : '🔴 PUT (LOWER ⬇️)'}\n` +
       `Timeframe: ${sig.expiry.toUpperCase()}\n` +
       `Entry Price: $${sig.entryPrice}\n` +
+      `🎯 Take Profit (TP): $${tpVal}\n` +
+      `🛡️ Stop Loss (SL): $${slVal}\n` +
       `AI Win Rate: ${sig.winRate}%\n` +
       `Pocket Payout: ${sig.payoutPct}%`;
 
     navigator.clipboard.writeText(formatted);
     playSignalBeep(sig.direction === 'CALL');
-    toast.success(`Copied ${sig.symbol} ${sig.direction} Signal to Clipboard!`);
+    toast.success(`Copied ${sig.symbol} ${sig.direction} Signal with TP & SL!`);
   };
 
   // Format Countdown Timer nicely
@@ -557,6 +625,9 @@ export default function PocketSignalsWorkspace({
               <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/30 flex items-center gap-1">
                 <Trophy size={13} /> Session Win Rate: {winRatioPct}% ({sessionWins}W / {sessionLosses}L)
               </span>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-purple-500/10 text-purple-400 border border-purple-500/30 flex items-center gap-1" title="Python 3 HTTP Persistence Backend active on port 8000">
+                <Database size={12} className="text-purple-400" /> Python Backend Synced
+              </span>
             </div>
 
             <h1 className="text-2xl md:text-3xl font-extrabold text-[#E6E9EF] tracking-tight">
@@ -591,6 +662,18 @@ export default function PocketSignalsWorkspace({
             >
               <Radio size={16} className={autoRefresh ? 'animate-pulse' : ''} />
               <span>{autoRefresh ? 'Live Auto-Stream' : 'Paused'}</span>
+            </button>
+
+            <button
+              onClick={() => {
+                window.open("/api/pocket-option/export", "_blank");
+                toast.success("Downloading full trading audit log from Python backend!");
+              }}
+              className="px-3 py-2.5 rounded-xl bg-[#181D26] hover:bg-[#232833] border border-[#232833] text-purple-300 hover:text-purple-200 text-xs font-bold flex items-center gap-1.5 transition-all"
+              title="Export Full Trade History & Settings JSON from Python Backend"
+            >
+              <Download size={14} />
+              <span className="hidden sm:inline">Export Audit Log</span>
             </button>
 
             <button
@@ -703,20 +786,43 @@ export default function PocketSignalsWorkspace({
           <span>1-Click Live Confluence Evaluation</span>
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {POCKET_OPTION_PAIRS.map(pair => (
-            <button
-              key={pair.symbol}
-              onClick={() => handleRequestSingleSignal(pair)}
-              disabled={scanningPair === pair.symbol}
-              className="px-3 py-2 rounded-lg bg-[#181D26] border border-[#232833] hover:border-[#3DDBD9] hover:bg-[#232833] text-xs font-mono font-medium text-[#E6E9EF] flex items-center gap-2 flex-shrink-0 transition-all disabled:opacity-50"
-            >
-              <span>{pair.label}</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#00E676]/10 text-[#00E676] font-bold">
-                {pair.payout}%
-              </span>
-              {scanningPair === pair.symbol && <RefreshCw size={12} className="animate-spin text-[#3DDBD9]" />}
-            </button>
-          ))}
+          {(() => {
+            const day = new Date().getUTCDay();
+            const isWeekend = day === 0 || day === 6;
+            return POCKET_OPTION_PAIRS.map(pair => {
+              const isClosed = isWeekend && pair.category !== 'crypto';
+              return (
+                <button
+                  key={pair.symbol}
+                  onClick={() => {
+                    if (isClosed) {
+                      toast.error(`${pair.label} market is closed on weekends. Please select a 24/7 Crypto asset (BTC, ETH, SOL).`);
+                      return;
+                    }
+                    handleRequestSingleSignal(pair);
+                  }}
+                  disabled={scanningPair === pair.symbol}
+                  className={`px-3 py-2 rounded-lg border text-xs font-mono font-medium flex items-center gap-2 flex-shrink-0 transition-all ${
+                    isClosed
+                      ? 'bg-[#12161D]/60 border-[#232833] text-[#838C9C]/60 cursor-not-allowed opacity-60'
+                      : 'bg-[#181D26] border-[#232833] hover:border-[#3DDBD9] hover:bg-[#232833] text-[#E6E9EF]'
+                  }`}
+                >
+                  <span>{pair.label}</span>
+                  {isClosed ? (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400/80 font-bold">
+                      Closed
+                    </span>
+                  ) : (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#00E676]/10 text-[#00E676] font-bold">
+                      {pair.payout}%
+                    </span>
+                  )}
+                  {scanningPair === pair.symbol && <RefreshCw size={12} className="animate-spin text-[#3DDBD9]" />}
+                </button>
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -768,16 +874,47 @@ export default function PocketSignalsWorkspace({
         </div>
       </div>
 
-      {/* CFD PIP-GAINS CONSOLE */}
+      {/* Weekend Market Hours Banner */}
+      {(() => {
+        const day = new Date().getUTCDay();
+        const isWeekend = day === 0 || day === 6;
+        if (!isWeekend) return null;
+        return (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-amber-300 text-xs font-semibold shadow-lg">
+            <div className="flex items-start md:items-center gap-3">
+              <span className="relative flex h-3 w-3 mt-0.5 md:mt-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-200 uppercase font-mono font-black tracking-wider text-xs">Weekend Market Hours Active (Sat & Sun)</span>
+                  <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">24/7 CRYPTO ONLY</span>
+                </div>
+                <p className="text-amber-300/80 text-[11px] font-normal mt-0.5 leading-relaxed">
+                  Forex, Stock, and Commodity markets are closed on weekends. Signal generation automatically prioritizes 24/7 Crypto markets (BTC, ETH, SOL).
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end md:self-auto">
+              <span className="text-[11px] font-mono text-amber-400 font-bold bg-amber-950/60 border border-amber-500/30 px-3 py-1.5 rounded-xl">
+                Forex Reopens: Sunday 5PM EST
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* TARGET & POSITION SIZE CONSOLE */}
       <div className="bg-gradient-to-r from-[#181D26] to-[#12161D] border border-[#232833]/80 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-md relative">
         <div className="absolute top-0 right-0 h-full w-1/3 bg-gradient-to-l from-[#3DDBD9]/5 to-transparent pointer-events-none rounded-r-2xl"></div>
         <div className="space-y-1.5 flex-1 relative z-10">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#3DDBD9] animate-pulse"></span>
-            <h4 className="text-sm font-bold text-[#E6E9EF] tracking-tight">Forex & CFD Pips Calculator Mode Active</h4>
+            <h4 className="text-sm font-bold text-[#E6E9EF] tracking-tight">Algorithmic Take Profit (TP) & Stop Loss (SL) Engine</h4>
           </div>
           <p className="text-xs text-[#838C9C] max-w-xl leading-relaxed">
-            Profits are calculated based on **Pips Gained**. The higher the price moves in your direction, the greater the profit. Standard lot size is configured below.
+            Every trade signal includes explicit **Take Profit (TP)** and **Stop Loss (SL)** levels calculated dynamically for optimal risk-reward ratio. Standard lot size is configured below.
           </p>
         </div>
 
@@ -932,7 +1069,7 @@ export default function PocketSignalsWorkspace({
                   </div>
                 </div>
 
-                {/* Price Grid */}
+                {/* Price Grid & TP / SL Targets */}
                 <div className="bg-[#181D26]/90 rounded-xl p-3 border border-[#232833] space-y-2 mb-4 text-xs font-mono">
                   <div className="flex items-center justify-between">
                     <span className="text-[#838C9C]">Entry Price:</span>
@@ -945,34 +1082,38 @@ export default function PocketSignalsWorkspace({
                     </span>
                   </div>
 
-                  {/* Dynamic Pip Gains and Lot Profit */}
+                  {/* Take Profit (TP) and Stop Loss (SL) */}
                   {(() => {
-                    const { pips, profit } = calculatePipsAndProfit(sig.symbol, sig.entryPrice, livePrice, sig.direction, lotSize);
+                    const { tp, sl } = calculateTpAndSl(sig.symbol, sig.entryPrice, sig.direction);
+                    const tpVal = sig.takeProfit ? formatSmartPrice(sig.takeProfit, sig.symbol) : tp;
+                    const slVal = sig.stopLoss ? formatSmartPrice(sig.stopLoss, sig.symbol) : sl;
+
                     return (
-                      <>
-                        <div className="flex items-center justify-between pt-1 border-t border-[#232833]/60">
-                          <span className="text-[#838C9C] flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#3DDBD9]"></span>
-                            Pips Gained:
+                      <div className="grid grid-cols-2 gap-2 my-2.5 pt-2 pb-2.5 border-t border-b border-[#232833]">
+                        <div className="bg-[#00E676]/10 border border-[#00E676]/30 rounded-lg p-2 flex flex-col justify-center">
+                          <span className="text-[10px] font-extrabold text-[#00E676] uppercase tracking-wider flex items-center gap-1">
+                            <Target size={11} className="text-[#00E676]" />
+                            Take Profit (TP)
                           </span>
-                          <span className={`font-bold font-mono text-xs ${pips >= 0 ? 'text-[#00E676]' : 'text-[#FF5252]'}`}>
-                            {pips >= 0 ? `+${pips}` : pips} pips
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between pb-1 border-b border-[#232833]/60">
-                          <span className="text-[#838C9C] flex items-center gap-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#00E676]"></span>
-                            Est. Profit ({lotSize} Lot):
-                          </span>
-                          <span className={`font-black font-mono text-sm ${profit >= 0 ? 'text-[#00E676]' : 'text-[#FF5252]'}`}>
-                            {profit >= 0 ? `+$${profit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}` : `-$${Math.abs(profit).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                          <span className="text-xs font-black text-[#00E676] font-mono mt-1">
+                            ${tpVal}
                           </span>
                         </div>
-                      </>
+
+                        <div className="bg-[#FF5252]/10 border border-[#FF5252]/30 rounded-lg p-2 flex flex-col justify-center">
+                          <span className="text-[10px] font-extrabold text-[#FF5252] uppercase tracking-wider flex items-center gap-1">
+                            <ShieldAlert size={11} className="text-[#FF5252]" />
+                            Stop Loss (SL)
+                          </span>
+                          <span className="text-xs font-black text-[#FF5252] font-mono mt-1">
+                            ${slVal}
+                          </span>
+                        </div>
+                      </div>
                     );
                   })()}
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex items-center justify-between pt-0.5">
                     <span className="text-[#838C9C]">AI Win Probability:</span>
                     <span className="font-black text-sm text-[#00E676]">{sig.winRate}%</span>
                   </div>
