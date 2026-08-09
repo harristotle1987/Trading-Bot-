@@ -105,6 +105,51 @@ export default function PocketSignalsWorkspace({
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
 
   const { prices } = useRealtimeData('prices');
+  const [hasLoadedSettings, setHasLoadedSettings] = useState(false);
+
+  // Load saved settings from Python backend on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch("/api/pocket-option/load-settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.lotSize !== undefined) setLotSize(data.lotSize);
+          if (data.selectedTimeframe !== undefined) setSelectedTimeframe(data.selectedTimeframe);
+          if (data.selectedStrategies !== undefined) setSelectedStrategyIds(data.selectedStrategies);
+        }
+      } catch (err) {
+        console.warn("Could not load settings from python backend:", err);
+      } finally {
+        setHasLoadedSettings(true);
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  // Auto-save settings to Python backend whenever they change
+  useEffect(() => {
+    if (!hasLoadedSettings) return;
+
+    const saveSettings = async () => {
+      try {
+        await fetch("/api/pocket-option/save-settings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lotSize,
+            selectedTimeframe,
+            selectedStrategies: selectedStrategyIds
+          })
+        });
+      } catch (err) {
+        console.error("Failed to auto-save settings to Python backend:", err);
+      }
+    };
+
+    const timer = setTimeout(saveSettings, 400);
+    return () => clearTimeout(timer);
+  }, [lotSize, selectedTimeframe, selectedStrategyIds, hasLoadedSettings]);
 
   // Multi-strategy configurations
   const selectedStrategyConfigs = TRADING_STRATEGIES.filter(s => selectedStrategyIds.includes(s.id));
@@ -399,6 +444,26 @@ export default function PocketSignalsWorkspace({
 
       setSignals(prev => [newSig!, ...prev.filter(s => s.id !== newSig!.id)]);
       playSignalBeep(newSig.direction === 'CALL');
+
+      // Auto-save signal generator application to Python backend
+      fetch("/api/pocket-option/save-settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          signalGeneratorSettings: {
+            symbol: pairObj.symbol,
+            isOtc: pairObj.isOtc,
+            strategyName: selectedStrategyConfig.name,
+            timeframe: selectedTimeframe,
+            generatedAt: new Date().toISOString(),
+            signalId: newSig!.id,
+            direction: newSig!.direction,
+            entryPrice: newSig!.entryPrice,
+            winRate: newSig!.winRate
+          }
+        })
+      }).catch(err => console.warn("Failed to auto-save signal generator settings:", err));
+
       toast.success(
         `NEW SIGNAL: ${newSig.symbol} ➔ ${newSig.direction} [${newSig.expiry} Expiry, ${newSig.winRate}% Win Rate]`,
         { id: toastId }

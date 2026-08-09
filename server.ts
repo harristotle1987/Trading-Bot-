@@ -1,6 +1,7 @@
 
 import { pusherServer as pusher } from './src/lib/pusher.js';
 import { calculateMarketPnL } from './src/utils/tradeMath.js';
+import { spawn } from "child_process";
 
 
 import { GoogleGenAI } from "@google/genai";
@@ -40,6 +41,17 @@ app.use('/api/', (req, res, next) => {
 });
 async function startServer() {
   await initFirebaseAdmin();
+
+  // Automatically start the Python settings backend
+  console.log("[Node] Booting Python settings backend...");
+  const pythonBackend = spawn("python3", ["backend.py"], { stdio: "inherit" });
+  pythonBackend.on("error", (err) => {
+    console.error("[Node] Failed to start Python backend:", err);
+  });
+  pythonBackend.on("exit", (code) => {
+    console.warn(`[Node] Python settings backend exited with code ${code}`);
+  });
+
   const PORT = 3000;
 
   // API Routes
@@ -1348,6 +1360,47 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     } catch (err) {
       console.error("Agent workspace scan error:", err);
       res.status(500).json({ error: "Failed to perform agent scan" });
+    }
+  });
+
+  // POCKET OPTION SETTINGS PERSISTENCE (PROXIED TO PYTHON BACKEND ON PORT 8000)
+  app.get("/api/pocket-option/load-settings", async (req, res) => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/load");
+      if (response.ok) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        res.status(response.status).json({ error: "Failed to load from Python backend" });
+      }
+    } catch (e: any) {
+      console.warn("Python backend is offline, falling back to local defaults:", e.message);
+      res.json({
+        lotSize: 1.0,
+        selectedTimeframe: "30m",
+        selectedStrategies: ["DAY_TRADING"],
+        customDocText: "",
+        savedSignals: []
+      });
+    }
+  });
+
+  app.post("/api/pocket-option/save-settings", async (req, res) => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        res.status(response.status).json({ error: "Failed to save to Python backend" });
+      }
+    } catch (e: any) {
+      console.error("Failed to save to Python backend:", e.message);
+      res.status(500).json({ error: "Python backend is offline or saving failed" });
     }
   });
 
