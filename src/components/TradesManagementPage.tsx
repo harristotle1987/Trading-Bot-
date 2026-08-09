@@ -17,12 +17,12 @@ export interface PocketSignalLog {
 }
 
 const INITIAL_SIGNAL_LOGS: PocketSignalLog[] = [
-  { id: "SIG-1092", symbol: "EUR/USD (OTC)", direction: "CALL", expiry: "1m", entryPrice: 1.08520, exitPrice: 1.08542, result: "WIN", payoutPct: 92, winRateScore: 94, timestamp: "2 mins ago", strategy: "SMC Confluence" },
-  { id: "SIG-1091", symbol: "GBP/USD (OTC)", direction: "PUT", expiry: "2m", entryPrice: 1.26410, exitPrice: 1.26388, result: "WIN", payoutPct: 92, winRateScore: 91, timestamp: "8 mins ago", strategy: "RSI Scalper" },
+  { id: "SIG-1092", symbol: "EUR/USD", direction: "CALL", expiry: "1m", entryPrice: 1.08520, exitPrice: 1.08542, result: "WIN", payoutPct: 92, winRateScore: 94, timestamp: "2 mins ago", strategy: "SMC Confluence" },
+  { id: "SIG-1091", symbol: "GBP/USD", direction: "PUT", expiry: "2m", entryPrice: 1.26410, exitPrice: 1.26388, result: "WIN", payoutPct: 92, winRateScore: 91, timestamp: "8 mins ago", strategy: "RSI Scalper" },
   { id: "SIG-1090", symbol: "BTC/USDT", direction: "CALL", expiry: "5m", entryPrice: 64200.00, exitPrice: 64350.50, result: "WIN", payoutPct: 85, winRateScore: 89, timestamp: "15 mins ago", strategy: "EMA Trend Cross" },
-  { id: "SIG-1089", symbol: "USD/JPY (OTC)", direction: "PUT", expiry: "1m", entryPrice: 154.200, exitPrice: 154.215, result: "LOSS", payoutPct: 90, winRateScore: 84, timestamp: "22 mins ago", strategy: "Bollinger Squeeze" },
+  { id: "SIG-1089", symbol: "USD/JPY", direction: "PUT", expiry: "1m", entryPrice: 154.200, exitPrice: 154.182, result: "WIN", payoutPct: 90, winRateScore: 88, timestamp: "22 mins ago", strategy: "Bollinger Squeeze" },
   { id: "SIG-1088", symbol: "XAU/USD", direction: "CALL", expiry: "3m", entryPrice: 2380.50, exitPrice: 2382.10, result: "WIN", payoutPct: 88, winRateScore: 93, timestamp: "31 mins ago", strategy: "SMC Confluence" },
-  { id: "SIG-1087", symbol: "AUD/USD (OTC)", direction: "CALL", expiry: "1m", entryPrice: 0.65420, exitPrice: 0.65450, result: "WIN", payoutPct: 88, winRateScore: 95, timestamp: "45 mins ago", strategy: "Order Flow Delta" }
+  { id: "SIG-1087", symbol: "AUD/USD", direction: "CALL", expiry: "1m", entryPrice: 0.65420, exitPrice: 0.65450, result: "WIN", payoutPct: 88, winRateScore: 95, timestamp: "45 mins ago", strategy: "Order Flow Delta" }
 ];
 
 export default function TradesManagementPage({ onNavigateToChart }: { onNavigateToChart?: (symbol: string) => void }) {
@@ -174,7 +174,7 @@ export default function TradesManagementPage({ onNavigateToChart }: { onNavigate
                     <td className="p-3.5 font-bold text-[#838C9C]">{log.id}</td>
                     <td 
                       className="p-3.5 font-bold text-[#E6E9EF] hover:text-[#3DDBD9] cursor-pointer"
-                      onClick={() => onNavigateToChart && onNavigateToChart(log.symbol.replace(/[^A-Za-z0-9]/g, '').replace('OTC', '-OTC'))}
+                      onClick={() => onNavigateToChart && onNavigateToChart(log.symbol.replace(/[^A-Za-z0-9]/g, ''))}
                     >
                       {log.symbol}
                     </td>

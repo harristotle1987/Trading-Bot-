@@ -197,8 +197,6 @@ async function startServer() {
 
       GLOBAL_PRICES[s] = p;
       GLOBAL_PRICES[clean] = p;
-      GLOBAL_PRICES[`${clean}-OTC`] = p;
-      GLOBAL_PRICES[`${clean} (OTC)`] = p;
 
       if (clean.endsWith("USDT")) {
           const base = clean.replace("USDT", "");
@@ -207,8 +205,6 @@ async function startServer() {
       } else if (clean.length === 6) {
           const pair = `${clean.slice(0, 3)}/${clean.slice(3)}`;
           GLOBAL_PRICES[pair] = p;
-          GLOBAL_PRICES[`${pair} (OTC)`] = p;
-          GLOBAL_PRICES[`${clean}-OTC`] = p;
       }
   }
   
@@ -1358,17 +1354,17 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
   // POCKET OPTION SIGNALS API
   app.get("/api/pocket-option/signals", (req, res) => {
     const activeStrategy = (req.query.strategy as string) || "Day Trading";
-    const reqTimeframe = (req.query.timeframe as string) || "15m";
+    const reqTimeframe = (req.query.timeframe as string) || "30m";
 
     const basePairs = [
-      { symbol: "EUR/USD (OTC)", cleanSym: "EURUSD", isOtc: true, category: "forex", payout: 92, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 94, strategy: activeStrategy, ind: ["RSI (26) Oversold", "EMA 8/21 Cross", "Support Bounce"] },
-      { symbol: "GBP/USD (OTC)", cleanSym: "GBPUSD", isOtc: true, category: "forex", payout: 92, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 91, strategy: activeStrategy, ind: ["Bollinger Upper Rejection", "RSI (72) Overbought"] },
+      { symbol: "EUR/USD", cleanSym: "EURUSD", isOtc: false, category: "forex", payout: 92, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 94, strategy: activeStrategy, ind: ["RSI (26) Oversold", "EMA 8/21 Cross", "Support Bounce"] },
+      { symbol: "GBP/USD", cleanSym: "GBPUSD", isOtc: false, category: "forex", payout: 92, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 91, strategy: activeStrategy, ind: ["Bollinger Upper Rejection", "RSI (72) Overbought"] },
       { symbol: "BTC/USDT", cleanSym: "BTCUSDT", isOtc: false, category: "crypto", payout: 85, expiry: reqTimeframe || "5m", dir: "CALL", winRate: 93, strategy: activeStrategy, ind: ["Order Block FVG Mitigation", "200 EMA Support"] },
-      { symbol: "USD/JPY (OTC)", cleanSym: "USDJPY", isOtc: true, category: "forex", payout: 90, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 89, strategy: activeStrategy, ind: ["Band Squeeze Breakout", "Stochastic Cross"] },
-      { symbol: "AUD/USD (OTC)", cleanSym: "AUDUSD", isOtc: true, category: "forex", payout: 88, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 95, strategy: activeStrategy, ind: ["+1,800 Buy Imbalance", "VWAP Pullback"] },
+      { symbol: "USD/JPY", cleanSym: "USDJPY", isOtc: false, category: "forex", payout: 90, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 89, strategy: activeStrategy, ind: ["Band Squeeze Breakout", "Stochastic Cross"] },
+      { symbol: "AUD/USD", cleanSym: "AUDUSD", isOtc: false, category: "forex", payout: 88, expiry: reqTimeframe || "1m", dir: "CALL", winRate: 95, strategy: activeStrategy, ind: ["+1,800 Buy Imbalance", "VWAP Pullback"] },
       { symbol: "XAU/USD", cleanSym: "XAUUSD", isOtc: false, category: "commodities", payout: 88, expiry: reqTimeframe || "3m", dir: "PUT", winRate: 90, strategy: activeStrategy, ind: ["Key Resistance Pin Bar", "Bearish FVG"] },
-      { symbol: "USD/CAD (OTC)", cleanSym: "USDCAD", isOtc: true, category: "forex", payout: 89, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 88, strategy: activeStrategy, ind: ["MACD Bear Divergence", "3 StdDev Extension"] },
-      { symbol: "EUR/GBP (OTC)", cleanSym: "EURGBP", isOtc: true, category: "forex", payout: 91, expiry: reqTimeframe || "30s", dir: "CALL", winRate: 96, strategy: activeStrategy, ind: ["Micro Trend Crossover", "Volume Surge"] }
+      { symbol: "USD/CAD", cleanSym: "USDCAD", isOtc: false, category: "forex", payout: 89, expiry: reqTimeframe || "2m", dir: "PUT", winRate: 88, strategy: activeStrategy, ind: ["MACD Bear Divergence", "3 StdDev Extension"] },
+      { symbol: "EUR/GBP", cleanSym: "EURGBP", isOtc: false, category: "forex", payout: 91, expiry: reqTimeframe || "30s", dir: "CALL", winRate: 96, strategy: activeStrategy, ind: ["Micro Trend Crossover", "Volume Surge"] }
     ];
 
     const getDurationMs = (tf: string) => {
@@ -1473,15 +1469,15 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
 
     const newSig = {
       id: `POCKET-${Math.floor(1000 + Math.random() * 9000)}`,
-      symbol: `${cleanSym.substring(0,3)}/${cleanSym.substring(3)} ${isOtc ? '(OTC)' : ''}`.trim(),
-      isOtc: !!isOtc,
+      symbol: `${cleanSym.substring(0,3)}/${cleanSym.substring(3)}`,
+      isOtc: false,
       category: isForex ? "forex" : "crypto",
       direction: isCall ? "CALL" : "PUT",
       expiry: tf,
       entryPrice: formattedPrice,
       currentPrice: formattedPrice,
       winRate: winRate,
-      payoutPct: isOtc ? 92 : 88,
+      payoutPct: 88,
       confidence: winRate >= 92 ? "ULTRA_ACCURATE" : "HIGH_CONFLUENCE",
       strategyUsed: strategyName || "Day Trading (VWAP)",
       indicators: ["SMC Order Block Retest", "RSI Momentum Spike", "Volume Delta Imbalance"],

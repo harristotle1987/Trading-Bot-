@@ -42,12 +42,9 @@ export const FinnhubModule = {
             if (calc[key]) {
               const val = calc[key];
               prices[sym] = val;
-              prices[`${sym}-OTC`] = val;
-              prices[`${sym} (OTC)`] = val;
               // Clean form with slash
               const withSlash = `${sym.slice(0, 3)}/${sym.slice(3)}`;
               prices[withSlash] = val;
-              prices[`${withSlash} (OTC)`] = val;
             }
           }
         }

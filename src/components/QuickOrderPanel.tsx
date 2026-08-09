@@ -410,7 +410,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
                             <textarea
                                 value={customDocText}
                                 onChange={e => setCustomDocText(e.target.value)}
-                                placeholder="Paste your custom Pocket Option strategy rules, YouTube notes, SMC entry guidelines, or OTC volatility filters here..."
+                                placeholder="Paste your custom Pocket Option strategy rules, YouTube notes, SMC entry guidelines, or high volatility filters here..."
                                 className="w-full h-40 bg-[#0B0E13] border border-[#232833] focus:border-[#3DDBD9] rounded-xl p-3 text-xs text-white font-mono placeholder-[#838C9C] outline-none"
                             />
                             <button

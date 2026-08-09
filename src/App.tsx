@@ -10,7 +10,6 @@ import TradesManagementPage from "./components/TradesManagementPage";
 import InteractiveChartsWorkspace from "./components/InteractiveChartsWorkspace";
 import TopNavbar from "./components/TopNavbar";
 import HistoricalTradesModal from "./components/HistoricalTradesModal";
-import MarketTicker from "./components/MarketTicker";
 import QuickOrderPanel from "./components/QuickOrderPanel";
 import PocketSignalsWorkspace from "./components/PocketSignalsWorkspace";
 import StrategyStudioWorkspace from "./components/StrategyStudioWorkspace";
@@ -27,20 +26,15 @@ export const TRADABLE_PAIRS = [
     { symbol: "DOGEUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "AVAXUSDT", category: "crypto", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
 
-    // Forex & OTC
+    // Forex (Non-OTC)
     { symbol: "EURUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "EURUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "GBPUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "GBPUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "USDJPY-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "AUDUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "AUDUSD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDCAD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "USDCAD-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
     { symbol: "USDCHF", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "EURGBP-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
-    { symbol: "GBPJPY-OTC", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "EURGBP", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
+    { symbol: "GBPJPY", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
 
     // Commodities & Metals
     { symbol: "XAUUSD", category: "forex", timeframes: ["1s", "1m", "5m", "15m", "1h"] },
@@ -199,7 +193,6 @@ export default function App() {
       <div className="flex-1 flex flex-col h-full relative overflow-hidden pb-[60px] md:pb-0">
         {/* Top Bar */}
         <TopNavbar onReset={triggerReset} />
-        <MarketTicker />
 
         {/* Page Content */}
         <main className={`flex-1 overflow-auto relative w-full max-w-[100vw] ${activeTab === "Journal" ? "p-4 lg:p-6" : "p-4 md:p-6 lg:p-8"}`}>
