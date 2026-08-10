@@ -139,8 +139,21 @@ export default function App() {
   };
 
   const triggerReset = () => {
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (e) {
+      console.warn("Storage reset warning:", e);
+    }
+    setActiveStrategyId('day-trading');
+    setActiveTimeframe('30m');
+    setChartFocusSymbol('EURUSD');
+    setActiveTab('Signals');
     setIsBooting(true);
-    setBootText("Initializing System...");
+    setBootText("Resetting All Signals, Timers & Systems...");
+    setTimeout(() => {
+      window.location.reload();
+    }, 1200);
   };
 
   if (isBooting) {

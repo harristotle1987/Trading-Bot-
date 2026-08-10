@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { pusherClient as pusherInstance } from '../lib/pusher';
 
 const DEFAULT_PRICES: Record<string, number> = {
-    "BTCUSDT": 64250.00, "ETHUSDT": 3450.00, "SOLUSDT": 148.50, "XRPUSDT": 0.58, "BNBUSDT": 580.00,
+    "BTCUSDT": 64250.00, "ETHUSDT": 1925.00, "SOLUSDT": 77.50, "XRPUSDT": 0.58, "BNBUSDT": 580.00,
     "ADAUSDT": 0.38, "DOGEUSDT": 0.12, "AVAXUSDT": 26.50, "LINKUSDT": 14.20, "DOTUSDT": 6.80,
     "NEARUSDT": 5.10, "SUIUSDT": 1.85, "APTUSDT": 8.40, "MATICUSDT": 0.52, "LTCUSDT": 72.00,
     "UNIUSDT": 7.80, "ATOMUSDT": 6.20, "ETCUSDT": 21.00, "FILUSDT": 4.80, "ARBUSDT": 0.62,

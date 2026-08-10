@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Zap, Radio, Bell, RefreshCw, Smartphone, Download } from "lucide-react";
+import { Zap, Radio, Bell, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { usePWA } from "../hooks/usePWA";
 
 export default function TopNavbar({ onReset }: { onReset?: () => void }) {
   const [isResetting, setIsResetting] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationInterval, setNotificationInterval] = useState<string>("5 mins");
   const notifRef = useRef<HTMLDivElement>(null);
-  const { platform, setShowIOSGuide, handleInstallAndroid } = usePWA();
 
   const handleReset = async () => {
     if (isResetting) return;
@@ -16,7 +14,13 @@ export default function TopNavbar({ onReset }: { onReset?: () => void }) {
         
     try {
       await fetch('/api/system/reset', { method: 'POST' });
-      toast.success("System Reset Triggered");
+      toast.success("System Reset Triggered - Signals, Timing & Settings Cleared!");
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch (e) {
+        console.warn("Storage clear warning:", e);
+      }
       if (onReset) {
         onReset();
       } else {
@@ -79,28 +83,6 @@ export default function TopNavbar({ onReset }: { onReset?: () => void }) {
           <span className="text-[#838C9C]">Signal Stream:</span>
           <span className="text-[#00E676] font-bold">ONLINE (92% Max Payout)</span>
         </div>
-
-        {/* PWA Install / Status Action */}
-        {!platform.isStandalone && (
-          <button
-            onClick={() => {
-              if (platform.isIOS) {
-                setShowIOSGuide(true);
-              } else if (platform.isAndroid) {
-                handleInstallAndroid();
-              } else {
-                toast.info("PWA Ready! On Desktop, click 'Install Nexus Trade' in your browser address bar.");
-              }
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#3DDBD9]/10 border border-[#3DDBD9]/30 text-[#3DDBD9] text-xs font-bold hover:bg-[#3DDBD9]/20 transition-all"
-            title="PWA App Install Info"
-          >
-            {platform.isIOS ? <Smartphone size={14} /> : <Download size={14} />}
-            <span className="hidden md:inline">
-              {platform.isIOS ? "iOS App Setup" : platform.isAndroid ? "Install Android App" : "PWA App Ready"}
-            </span>
-          </button>
-        )}
 
         {/* Notifications Dropdown */}
         <div className="relative" ref={notifRef}>

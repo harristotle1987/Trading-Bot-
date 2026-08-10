@@ -23,15 +23,25 @@ export default function APIKeysModal() {
     ctrader_access_token: ""
   });
 
+  // Load cached key inputs from localStorage on mount
+  useEffect(() => {
+    try {
+      const cachedKeys = localStorage.getItem("USER_API_KEYS");
+      if (cachedKeys) {
+        const parsed = JSON.parse(cachedKeys);
+        if (parsed) setKeys(prev => ({ ...prev, ...parsed }));
+      }
+    } catch (e) {
+      console.warn("Could not read USER_API_KEYS from localStorage", e);
+    }
+  }, []);
+
   const checkKeys = async () => {
     try {
       const res = await fetch("/api/config/keys", { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setStatus(data);
-        if (!data.nvidia || !data.bybit || !data.polygon || !data.finnhub) {
-          setIsOpen(true);
-        }
       }
     } catch (err) {
       console.warn("Could not fetch API keys status:", err);
@@ -65,20 +75,26 @@ export default function APIKeysModal() {
 
   const handleSave = async () => {
     try {
+      localStorage.setItem("USER_API_KEYS", JSON.stringify(keys));
+    } catch (e) {}
+
+    try {
       const res = await fetch("/api/config/keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(keys)
       });
       if (res.ok) {
-        toast.success("API keys updated successfully");
+        toast.success("API keys updated and saved successfully");
         setIsOpen(false);
         checkKeys();
       } else {
-        toast.error("Failed to update API keys");
+        toast.success("API keys saved locally in browser");
+        setIsOpen(false);
       }
     } catch (err) {
-      toast.error("Network error while saving keys");
+      toast.success("API keys saved locally in browser");
+      setIsOpen(false);
     }
   };
 

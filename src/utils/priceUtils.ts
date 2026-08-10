@@ -1,8 +1,8 @@
 export const DEFAULT_MARKET_PRICES: Record<string, number> = {
   // Crypto
   "BTCUSDT": 64250.00, "BTC": 64250.00, "BTC/USDT": 64250.00,
-  "ETHUSDT": 3450.00, "ETH": 3450.00, "ETH/USDT": 3450.00,
-  "SOLUSDT": 148.50, "SOL": 148.50, "SOL/USDT": 148.50,
+  "ETHUSDT": 1925.00, "ETH": 1925.00, "ETH/USDT": 1925.00,
+  "SOLUSDT": 77.50, "SOL": 77.50, "SOL/USDT": 77.50,
   "XRPUSDT": 0.58, "XRP": 0.58, "XRP/USDT": 0.58,
   "BNBUSDT": 580.00, "BNB": 580.00, "BNB/USDT": 580.00,
   "ADAUSDT": 0.38, "ADA": 0.38, "ADA/USDT": 0.38,
@@ -94,8 +94,8 @@ export function getPriceForSymbol(prices: Record<string, number> | undefined, ra
 
   // 4. Default intelligent price category estimation
   if (clean.includes('BTC')) return 64250;
-  if (clean.includes('ETH')) return 3450;
-  if (clean.includes('SOL')) return 148.5;
+  if (clean.includes('ETH')) return 1925;
+  if (clean.includes('SOL')) return 77.5;
   if (clean.includes('XAU') || clean.includes('GOLD')) return 2420.5;
   if (clean.includes('NVDA')) return 128.5;
   if (clean.includes('AAPL')) return 224.5;

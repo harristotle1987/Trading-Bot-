@@ -81,8 +81,8 @@ export async function fetch500OHLCVCandles(symbol: string, timeframe: string): P
   if (candles.length < 500) {
     let basePrice = 100;
     if (cleanSymbol.includes('BTC')) basePrice = 64250;
-    else if (cleanSymbol.includes('ETH')) basePrice = 3450;
-    else if (cleanSymbol.includes('SOL')) basePrice = 148.5;
+    else if (cleanSymbol.includes('ETH')) basePrice = 1925;
+    else if (cleanSymbol.includes('SOL')) basePrice = 77.5;
     else if (cleanSymbol.includes('XRP')) basePrice = 0.58;
     else if (cleanSymbol.includes('BNB')) basePrice = 580;
     else if (cleanSymbol.includes('ADA')) basePrice = 0.38;

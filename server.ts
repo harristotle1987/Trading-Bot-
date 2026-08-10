@@ -168,8 +168,8 @@ async function startServer() {
   const GLOBAL_PRICES: Record<string, number> = {
       // Crypto
       "BTCUSDT": 64250.00, "BTC": 64250.00,
-      "ETHUSDT": 3450.00, "ETH": 3450.00,
-      "SOLUSDT": 148.50, "SOL": 148.50, "SOL/USDT": 148.50,
+      "ETHUSDT": 1925.00, "ETH": 1925.00,
+      "SOLUSDT": 77.50, "SOL": 77.50, "SOL/USDT": 77.50,
       "XRPUSDT": 0.58, "XRP": 0.58,
       "BNBUSDT": 580.00, "BNB": 580.00,
       "ADAUSDT": 0.38, "ADA": 0.38,
@@ -561,7 +561,8 @@ const updatePrices = async () => {
     res.json({ status: "ok" });
   });
 
-  // Risk API Mocks for UI Development
+  // Risk API Settings with disk persistence
+  const RISK_SETTINGS_FILE = path.join(process.cwd(), "risk_settings.json");
   let riskSettings = {
     max_concurrent_trades: 3,
     max_daily_drawdown_pct: 0.05,
@@ -577,6 +578,15 @@ const updatePrices = async () => {
         max_daily_loss: 500
     }
   };
+
+  if (fs.existsSync(RISK_SETTINGS_FILE)) {
+    try {
+      const fileData = fs.readFileSync(RISK_SETTINGS_FILE, "utf-8");
+      riskSettings = { ...riskSettings, ...JSON.parse(fileData) };
+    } catch (e) {
+      console.warn("Could not read risk_settings.json:", e);
+    }
+  }
 
   if (db) {
       const syncRiskSettings = async () => {
@@ -600,6 +610,11 @@ const updatePrices = async () => {
 
   app.post("/api/risk/settings", express.json(), (req, res) => {
     riskSettings = { ...riskSettings, ...req.body };
+    try {
+      fs.writeFileSync(RISK_SETTINGS_FILE, JSON.stringify(riskSettings, null, 2), "utf-8");
+    } catch (e) {
+      console.warn("Failed writing risk_settings.json:", e);
+    }
     if (db && !firestoreDisabled) db.collection("system").doc("riskSettings").set( riskSettings, { merge: true }).catch(err => handleFirestoreError("riskSettings set", err));
     res.json(riskSettings);
   });
@@ -920,12 +935,25 @@ const updatePrices = async () => {
   });
 
 
+  const KEYS_FILE = path.join(process.cwd(), "api_keys_config.json");
+  if (fs.existsSync(KEYS_FILE)) {
+    try {
+      const storedKeys = JSON.parse(fs.readFileSync(KEYS_FILE, "utf-8"));
+      if (storedKeys.nvidia) process.env.NVIDIA_API_KEY = storedKeys.nvidia;
+      if (storedKeys.polygon) process.env.POLYGON_API_KEY = storedKeys.polygon;
+      if (storedKeys.finnhub) process.env.FINNHUB_API_KEY = storedKeys.finnhub;
+      if (storedKeys.ctrader_client_id) process.env.CTRADER_CLIENT_ID = storedKeys.ctrader_client_id;
+      if (storedKeys.ctrader_client_secret) process.env.CTRADER_CLIENT_SECRET = storedKeys.ctrader_client_secret;
+      if (storedKeys.ctrader_access_token) process.env.CTRADER_ACCESS_TOKEN = storedKeys.ctrader_access_token;
+    } catch (e) {
+      console.warn("Could not load api_keys_config.json:", e);
+    }
+  }
+
   app.get("/api/config/keys", (req, res) => {
       res.json({
           nvidia: !!process.env.NVIDIA_API_KEY,
           bybit: false,
-          // Removed polygon reference
-
           finnhub: !!process.env.FINNHUB_API_KEY,
           ctrader: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET),
           ctrader_needs_auth: !!(process.env.CTRADER_CLIENT_ID && process.env.CTRADER_CLIENT_SECRET && !process.env.CTRADER_ACCESS_TOKEN)
@@ -935,8 +963,6 @@ const updatePrices = async () => {
   app.post("/api/config/keys", express.json(), (req, res) => {
       const { nvidia, polygon, finnhub, ctrader_client_id, ctrader_client_secret, ctrader_access_token } = req.body;
       if (nvidia) process.env.NVIDIA_API_KEY = nvidia;
-      
-      
       if (polygon) process.env.POLYGON_API_KEY = polygon;
       if (finnhub) process.env.FINNHUB_API_KEY = finnhub;
       if (ctrader_client_id) process.env.CTRADER_CLIENT_ID = ctrader_client_id;
@@ -944,6 +970,11 @@ const updatePrices = async () => {
       if (ctrader_access_token) {
           process.env.CTRADER_ACCESS_TOKEN = ctrader_access_token;
           if (process.env.NODE_ENV !== "production") setupCTrader();
+      }
+      try {
+        fs.writeFileSync(KEYS_FILE, JSON.stringify(req.body, null, 2), "utf-8");
+      } catch (e) {
+        console.warn("Could not write api_keys_config.json:", e);
       }
       res.json({ status: "success" });
   });
@@ -1495,8 +1526,8 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     const signals = basePairs.map((item, idx) => {
       const price = GLOBAL_PRICES[item.cleanSym] || GLOBAL_PRICES[item.symbol] || (
         item.cleanSym.includes("BTC") ? 64250 :
-        item.cleanSym.includes("ETH") ? 3450 :
-        item.cleanSym.includes("SOL") ? 148.5 :
+        item.cleanSym.includes("ETH") ? 1925 :
+        item.cleanSym.includes("SOL") ? 77.5 :
         item.cleanSym.includes("XAU") ? 2420.5 :
         item.cleanSym.includes("JPY") ? 154.2 :
         item.cleanSym.includes("GBP") ? 1.2845 : 1.0852
@@ -1547,8 +1578,8 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
     }
     const price = GLOBAL_PRICES[norm] || GLOBAL_PRICES[symbol as string] || (
       cleanSym.includes("BTC") ? 64250 :
-      cleanSym.includes("ETH") ? 3450 :
-      cleanSym.includes("SOL") ? 148.5 :
+      cleanSym.includes("ETH") ? 1925 :
+      cleanSym.includes("SOL") ? 77.5 :
       cleanSym.includes("XAU") ? 2420.5 :
       cleanSym.includes("NVDA") ? 128.5 :
       cleanSym.includes("AAPL") ? 224.5 :
@@ -2383,8 +2414,8 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
       
       const basePrice = GLOBAL_PRICES[normSym] || GLOBAL_PRICES[symbol as string] || (
         normSym.includes("BTC") ? 64250 :
-        normSym.includes("ETH") ? 3450 :
-        normSym.includes("SOL") ? 148.5 :
+        normSym.includes("ETH") ? 1925 :
+        normSym.includes("SOL") ? 77.5 :
         normSym.includes("XAU") ? 2420.5 :
         normSym.includes("NVDA") ? 128.5 :
         normSym.includes("AAPL") ? 224.5 :
