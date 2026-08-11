@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Zap, Radio, Bell, RefreshCw } from "lucide-react";
+import { Zap, Radio, Bell, RefreshCw, Terminal } from "lucide-react";
 import { toast } from "sonner";
+import LiveAPITesterModal from "./LiveAPITesterModal";
 
 export default function TopNavbar({ onReset }: { onReset?: () => void }) {
   const [isResetting, setIsResetting] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showApiTester, setShowApiTester] = useState(false);
   const [notificationInterval, setNotificationInterval] = useState<string>("5 mins");
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +72,14 @@ export default function TopNavbar({ onReset }: { onReset?: () => void }) {
       {/* Pocket Option Links & Live Stream Status */}
       <div className="flex items-center gap-3">
         <button
+          onClick={() => setShowApiTester(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#3DDBD9]/10 border border-[#3DDBD9]/30 text-[#3DDBD9] text-xs font-mono font-bold hover:bg-[#3DDBD9]/20 transition-all shadow-[0_0_10px_rgba(61,219,217,0.15)]"
+        >
+          <Terminal size={14} />
+          <span className="hidden sm:inline">API Tester</span>
+        </button>
+
+        <button
           onClick={handleReset}
           disabled={isResetting}
           className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#FF453A]/10 border border-[#FF453A]/30 text-[#FF453A] text-xs font-bold hover:bg-[#FF453A]/20 transition-all"
@@ -122,6 +132,8 @@ export default function TopNavbar({ onReset }: { onReset?: () => void }) {
           )}
         </div>
       </div>
+
+      <LiveAPITesterModal isOpen={showApiTester} onClose={() => setShowApiTester(false)} />
     </header>
   );
 }
