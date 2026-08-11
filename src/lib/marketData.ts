@@ -21,13 +21,13 @@ export const FinnhubModule = {
           };
 
           const calc: Record<string, number> = {
-            EURUSD: quote.EUR ? 1 / quote.EUR : 1.0852,
-            GBPUSD: quote.GBP ? 1 / quote.GBP : 1.2845,
-            USDJPY: quote.JPY ? quote.JPY : 154.20,
-            AUDUSD: quote.AUD ? 1 / quote.AUD : 0.6582,
-            USDCAD: quote.CAD ? quote.CAD : 1.3745,
-            USDCHF: quote.CHF ? quote.CHF : 0.8835,
-            NZDUSD: quote.NZD ? 1 / quote.NZD : 0.5962,
+            EURUSD: quote.EUR ? 1 / quote.EUR : 1.1548,
+            GBPUSD: quote.GBP ? 1 / quote.GBP : 1.3506,
+            USDJPY: quote.JPY ? quote.JPY : 158.95,
+            AUDUSD: quote.AUD ? 1 / quote.AUD : 0.7059,
+            USDCAD: quote.CAD ? quote.CAD : 1.3939,
+            USDCHF: quote.CHF ? quote.CHF : 0.8095,
+            NZDUSD: quote.NZD ? 1 / quote.NZD : 0.5886,
             EURGBP: (quote.GBP && quote.EUR) ? quote.GBP / quote.EUR : 0.8448,
             EURJPY: (quote.JPY && quote.EUR) ? quote.JPY / quote.EUR : 167.35,
             GBPJPY: (quote.JPY && quote.GBP) ? quote.JPY / quote.GBP : 198.10,

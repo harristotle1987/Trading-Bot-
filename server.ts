@@ -197,9 +197,9 @@ async function startServer() {
       "FETUSDT": 1.35, "FET": 1.35,
       "WIFUSDT": 1.85, "WIF": 1.85,
       // Forex
-      "EURUSD": 1.0852, "GBPUSD": 1.2845, "USDJPY": 154.20, "AUDUSD": 0.6582, "USDCAD": 1.3745,
-      "USDCHF": 0.8835, "NZDUSD": 0.5962, "EURGBP": 0.8448, "EURJPY": 167.35, "GBPJPY": 198.10,
-      "AUDJPY": 101.50, "EURAUD": 1.6488, "GBPCAD": 1.7655, "CADJPY": 112.18, "CHFJPY": 174.55,
+      "EURUSD": 1.1548, "GBPUSD": 1.3506, "USDJPY": 158.95, "AUDUSD": 0.7059, "USDCAD": 1.3939,
+      "USDCHF": 0.8095, "NZDUSD": 0.5886, "EURGBP": 0.8550, "EURJPY": 183.56, "GBPJPY": 214.68,
+      "AUDJPY": 112.20, "EURAUD": 1.6360, "GBPCAD": 1.8820, "CADJPY": 114.00, "CHFJPY": 196.35,
       "EURNZD": 1.8210, "GBPAUD": 1.9512,
       // Commodities & Metals
       "XAUUSD": 2420.50, "XAGUSD": 28.40, "USOIL": 76.50,
@@ -422,31 +422,34 @@ const updatePrices = async () => {
               } catch (_) {}
           }
 
-          // 2. Finnhub API for Forex (Single Primary Forex API)
+          // 2. Open Exchange Rates API for Forex (Free, Live Exchange Rates)
           let forexFetched = false;
-          const finnhubKey = process.env.FINNHUB_API_KEY || 'c8651i2ad3i1fq4910s0';
           try {
-              const finnhubRes = await fetch(`https://finnhub.io/api/v1/forex/rates?base=USD&token=${finnhubKey}`, { signal: AbortSignal.timeout(4000) });
-              if (finnhubRes.ok) {
-                  const finnhubData = await finnhubRes.json();
-                  const quote = finnhubData?.quote;
-                  if (quote) {
+              let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
+              if (!erRes.ok) {
+                  erRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: AbortSignal.timeout(4000) });
+              }
+              if (erRes.ok) {
+                  const erData = await erRes.json();
+                  const rates = erData.conversion_rates || erData.rates;
+                  if (rates && rates.EUR) {
+                      const r = rates;
                       const calc: Record<string, number> = {
-                          "EURUSD": quote.EUR ? 1 / quote.EUR : 1.0852,
-                          "GBPUSD": quote.GBP ? 1 / quote.GBP : 1.2845,
-                          "USDJPY": quote.JPY ? quote.JPY : 154.20,
-                          "AUDUSD": quote.AUD ? 1 / quote.AUD : 0.6582,
-                          "USDCAD": quote.CAD ? quote.CAD : 1.3745,
-                          "USDCHF": quote.CHF ? quote.CHF : 0.8835,
-                          "NZDUSD": quote.NZD ? 1 / quote.NZD : 0.5962,
-                          "EURGBP": (quote.GBP && quote.EUR) ? quote.GBP / quote.EUR : 0.8448,
-                          "EURJPY": (quote.JPY && quote.EUR) ? quote.JPY / quote.EUR : 167.35,
-                          "GBPJPY": (quote.JPY && quote.GBP) ? quote.JPY / quote.GBP : 198.10,
-                          "AUDJPY": (quote.JPY && quote.AUD) ? quote.JPY / quote.AUD : 101.50,
-                          "EURAUD": (quote.AUD && quote.EUR) ? quote.AUD / quote.EUR : 1.6488,
-                          "GBPCAD": (quote.CAD && quote.GBP) ? quote.CAD / quote.GBP : 1.7655,
-                          "CADJPY": (quote.JPY && quote.CAD) ? quote.JPY / quote.CAD : 112.18,
-                          "CHFJPY": (quote.JPY && quote.CHF) ? quote.JPY / quote.CHF : 174.55
+                          "EURUSD": 1 / r.EUR,
+                          "GBPUSD": 1 / r.GBP,
+                          "USDJPY": r.JPY,
+                          "AUDUSD": 1 / r.AUD,
+                          "USDCAD": r.CAD,
+                          "USDCHF": r.CHF,
+                          "NZDUSD": 1 / r.NZD,
+                          "EURGBP": r.GBP / r.EUR,
+                          "EURJPY": r.JPY / r.EUR,
+                          "GBPJPY": r.JPY / r.GBP,
+                          "AUDJPY": r.JPY / r.AUD,
+                          "EURAUD": r.AUD / r.EUR,
+                          "GBPCAD": r.CAD / r.GBP,
+                          "CADJPY": r.JPY / r.CAD,
+                          "CHFJPY": r.JPY / r.CHF
                       };
                       for (const s of forexSymbols) {
                           if (calc[s]) {
@@ -457,48 +460,11 @@ const updatePrices = async () => {
                   }
               }
           } catch (e) {
-              console.warn("Finnhub forex fetch failed, trying Exchange Rate API fallback", e);
-          }
-
-          if (!forexFetched) {
-              try {
-                  let erRes = await fetch("https://open.er-api.com/v6/latest/USD", { signal: AbortSignal.timeout(4000) });
-                  if (!erRes.ok) {
-                      erRes = await fetch("https://api.exchangerate-api.com/v4/latest/USD", { signal: AbortSignal.timeout(4000) });
-                  }
-                  if (erRes.ok) {
-                      const erData = await erRes.json();
-                      const rates = erData.conversion_rates || erData.rates;
-                      if (rates) {
-                          const r = rates;
-                          const calc: Record<string, number> = {
-                              "EURUSD": 1 / r.EUR,
-                              "GBPUSD": 1 / r.GBP,
-                              "USDJPY": r.JPY,
-                              "AUDUSD": 1 / r.AUD,
-                              "USDCAD": r.CAD,
-                              "USDCHF": r.CHF,
-                              "NZDUSD": 1 / r.NZD,
-                              "EURGBP": r.GBP / r.EUR,
-                              "EURJPY": r.JPY / r.EUR,
-                              "GBPJPY": r.JPY / r.GBP,
-                              "AUDJPY": r.JPY / r.AUD,
-                              "EURAUD": r.AUD / r.EUR,
-                              "GBPCAD": r.CAD / r.GBP,
-                              "CADJPY": r.JPY / r.CAD,
-                              "CHFJPY": r.JPY / r.CHF
-                          };
-                          for (const s of forexSymbols) {
-                              if (calc[s]) {
-                                  setGlobalPrice(s, parseFloat(calc[s].toFixed(s.includes("JPY") ? 2 : 5)));
-                              }
-                          }
-                      }
-                  }
-              } catch (_) {}
+              console.warn("Exchange Rate API fetch failed, using fallback market rates", e);
           }
 
           // 3. Exchange Rate / Finnhub for Stocks
+          const fKey = process.env.FINNHUB_API_KEY || 'c8651i2ad3i1fq4910s0';
           for (const s of stockSymbols) {
               try {
                   const yahooRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${s}?interval=1m&range=1d`, {
@@ -514,7 +480,7 @@ const updatePrices = async () => {
                   }
               } catch (e) {
                   try {
-                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${finnhubKey}`, { signal: AbortSignal.timeout(2000) });
+                      const finnhubRes = await fetch(`https://finnhub.io/api/v1/quote?symbol=${s}&token=${fKey}`, { signal: AbortSignal.timeout(2000) });
                       if (finnhubRes.ok) {
                           const data = await finnhubRes.json();
                           if (data && data.c && data.c !== 0) setGlobalPrice(s, data.c);
@@ -1175,7 +1141,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
           targetSymbol = bestCandidate.symbol;
       }
 
-      const currentPrice = Number(GLOBAL_PRICES[targetSymbol] || (targetSymbol.includes("USD") && !targetSymbol.includes("USDT") ? 1.0850 : targetSymbol === "NVDA" ? 125.00 : 100));
+      const currentPrice = Number(GLOBAL_PRICES[targetSymbol] || (targetSymbol.includes("USD") && !targetSymbol.includes("USDT") ? 1.1548 : targetSymbol === "NVDA" ? 125.00 : 100));
       const decimalPlaces = targetSymbol.includes("USD") && !targetSymbol.includes("USDT") ? 4 : 2;
 
       const strategyRulesMap: Record<string, string> = {
@@ -1368,7 +1334,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
       ];
 
       const recommendations = scanPool.map(item => {
-          const price = Number(GLOBAL_PRICES[item.symbol] || (item.category === "FOREX" ? 1.0850 : item.symbol === "NVDA" ? 125.00 : 100));
+          const price = Number(GLOBAL_PRICES[item.symbol] || (item.category === "FOREX" ? 1.1548 : item.symbol === "NVDA" ? 125.00 : 100));
           const isForex = item.category === "FOREX";
           const isBuy = item.bias.includes("BUY");
           const isSwing = strategyList.includes("SWING_TRADING");
@@ -1581,7 +1547,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
         item.cleanSym.includes("BTC") ? 64250 :
         item.cleanSym.includes("ETH") ? 1925 :
         item.cleanSym.includes("SOL") ? 77.5 :
-        item.cleanSym.includes("JPY") ? 154.2 : 1.0852
+        item.cleanSym.includes("JPY") ? 154.2 : 1.1548
       );
       const isForex = item.cleanSym.length === 6 && !item.cleanSym.includes("USDT");
       const isJpy = item.cleanSym.includes("JPY");
@@ -1654,7 +1620,7 @@ function calculateWeightedStrategyAnalytics(weightsMap: Record<string, number>) 
       cleanSym.includes("ETH") ? 1925 :
       cleanSym.includes("SOL") ? 77.5 :
       cleanSym.includes("XAU") ? 2420.5 :
-      cleanSym.includes("JPY") ? 154.2 : 1.0852
+      cleanSym.includes("JPY") ? 154.2 : 1.1548
     );
     const isForex = cleanSym.length === 6 && !cleanSym.includes("USDT");
     const isJpy = cleanSym.includes("JPY");
@@ -2498,7 +2464,7 @@ app.post("/api/agent-workspace/demo/place-order", express.json(), async (req, re
         normSym.includes("XAU") ? 2420.5 :
         normSym.includes("NVDA") ? 128.5 :
         normSym.includes("AAPL") ? 224.5 :
-        normSym.includes("JPY") ? 154.2 : 1.0852
+        normSym.includes("JPY") ? 154.2 : 1.1548
       );
       const isForex = normSym.length === 6 && !normSym.includes("USDT");
       const isJpy = normSym.includes("JPY");

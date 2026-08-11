@@ -105,9 +105,9 @@ export async function fetch500OHLCVCandles(symbol: string, timeframe: string): P
     else if (cleanSymbol.includes('META')) basePrice = 485.0;
     else if (cleanSymbol.includes('PLTR')) basePrice = 28.5;
     else if (cleanSymbol.includes('COIN')) basePrice = 215.0;
-    else if (cleanSymbol.includes('JPY')) basePrice = 154.2;
-    else if (cleanSymbol.includes('GBP')) basePrice = 1.2845;
-    else if (cleanSymbol.includes('EUR') || cleanSymbol.length === 6) basePrice = 1.0852;
+    else if (cleanSymbol.includes('JPY')) basePrice = 158.95;
+    else if (cleanSymbol.includes('GBP')) basePrice = 1.3506;
+    else if (cleanSymbol.includes('EUR') || cleanSymbol.length === 6) basePrice = 1.1548;
 
     const now = Date.now();
     const timeframeMs = timeframe === '1h' ? 3600000 : timeframe === '4h' ? 14400000 : timeframe === '1d' ? 86400000 : 900000;

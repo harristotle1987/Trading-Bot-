@@ -30,21 +30,21 @@ export const DEFAULT_MARKET_PRICES: Record<string, number> = {
   "FETUSDT": 1.35, "FET": 1.35,
   "WIFUSDT": 1.85, "WIF": 1.85,
   // Forex
-  "EURUSD": 1.0852, "EUR/USD": 1.0852,
-  "GBPUSD": 1.2845, "GBP/USD": 1.2845,
-  "USDJPY": 154.20, "USD/JPY": 154.20,
-  "AUDUSD": 0.6582, "AUD/USD": 0.6582,
-  "USDCAD": 1.3745, "USD/CAD": 1.3745,
-  "USDCHF": 0.8835, "USD/CHF": 0.8835,
-  "NZDUSD": 0.5962, "NZD/USD": 0.5962,
-  "EURGBP": 0.8448, "EUR/GBP": 0.8448,
-  "EURJPY": 167.35, "EUR/JPY": 167.35,
-  "GBPJPY": 198.10, "GBP/JPY": 198.10,
-  "AUDJPY": 101.50, "AUD/JPY": 101.50,
-  "EURAUD": 1.6488, "EUR/AUD": 1.6488,
-  "GBPCAD": 1.7655, "GBP/CAD": 1.7655,
-  "CADJPY": 112.18, "CAD/JPY": 112.18,
-  "CHFJPY": 174.55, "CHF/JPY": 174.55,
+  "EURUSD": 1.1548, "EUR/USD": 1.1548,
+  "GBPUSD": 1.3506, "GBP/USD": 1.3506,
+  "USDJPY": 158.95, "USD/JPY": 158.95,
+  "AUDUSD": 0.7059, "AUD/USD": 0.7059,
+  "USDCAD": 1.3939, "USD/CAD": 1.3939,
+  "USDCHF": 0.8095, "USD/CHF": 0.8095,
+  "NZDUSD": 0.5886, "NZD/USD": 0.5886,
+  "EURGBP": 0.8550, "EUR/GBP": 0.8550,
+  "EURJPY": 183.56, "EUR/JPY": 183.56,
+  "GBPJPY": 214.68, "GBP/JPY": 214.68,
+  "AUDJPY": 112.20, "AUD/JPY": 112.20,
+  "EURAUD": 1.6360, "EUR/AUD": 1.6360,
+  "GBPCAD": 1.8820, "GBP/CAD": 1.8820,
+  "CADJPY": 114.00, "CAD/JPY": 114.00,
+  "CHFJPY": 196.35, "CHF/JPY": 196.35,
   "EURNZD": 1.8210, "EUR/NZD": 1.8210,
   "GBPAUD": 1.9512, "GBP/AUD": 1.9512,
   // Commodities & Metals
@@ -100,7 +100,7 @@ export function getPriceForSymbol(prices: Record<string, number> | undefined, ra
   if (clean.includes('NVDA')) return 128.5;
   if (clean.includes('AAPL')) return 224.5;
   if (clean.includes('JPY')) return 154.2;
-  if (clean.length === 6 && !clean.includes('USDT')) return 1.0852;
+  if (clean.length === 6 && !clean.includes('USDT')) return 1.1548;
 
   return 100;
 }

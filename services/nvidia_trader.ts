@@ -23,7 +23,7 @@ export const getNvidiaTradeSignals = async (): Promise<TradeSignal[]> => {
       return [
         { symbol: 'BTCUSDT', type: 'UP', entryPrice: prices['BTCUSDT'] || 65000, exitTime: '14:00', winRate: '88%', slPrice: (prices['BTCUSDT'] || 65000) * 0.99, tpPrice: (prices['BTCUSDT'] || 65000) * 1.02 },
         { symbol: 'ETHUSDT', type: 'DOWN', entryPrice: prices['ETHUSDT'] || 1925, exitTime: '14:30', winRate: '82%', slPrice: (prices['ETHUSDT'] || 1925) * 1.01, tpPrice: (prices['ETHUSDT'] || 1925) * 0.98 },
-        { symbol: 'EURUSD', type: 'UP', entryPrice: prices['EURUSD'] || 1.08, exitTime: '15:00', winRate: '79%', slPrice: (prices['EURUSD'] || 1.08) - 0.003, tpPrice: (prices['EURUSD'] || 1.08) + 0.006 },
+        { symbol: 'EURUSD', type: 'UP', entryPrice: prices['EURUSD'] || 1.1548, exitTime: '15:00', winRate: '79%', slPrice: (prices['EURUSD'] || 1.1548) - 0.003, tpPrice: (prices['EURUSD'] || 1.1548) + 0.006 },
         { symbol: 'USDJPY', type: 'UP', entryPrice: prices['USDJPY'] || 150, exitTime: '15:30', winRate: '75%', slPrice: (prices['USDJPY'] || 150) - 1, tpPrice: (prices['USDJPY'] || 150) + 2 }
       ];
   } catch (err) {
@@ -32,7 +32,7 @@ export const getNvidiaTradeSignals = async (): Promise<TradeSignal[]> => {
       return [
         { symbol: 'BTCUSDT', type: 'UP', entryPrice: 65200, exitTime: '14:00', winRate: '88%', slPrice: 64500, tpPrice: 66600 },
         { symbol: 'ETHUSDT', type: 'DOWN', entryPrice: 1925, exitTime: '14:30', winRate: '82%', slPrice: 1945, tpPrice: 1885 },
-        { symbol: 'EURUSD', type: 'UP', entryPrice: 1.0850, exitTime: '15:00', winRate: '79%', slPrice: 1.0820, tpPrice: 1.0910 },
+        { symbol: 'EURUSD', type: 'UP', entryPrice: 1.1548, exitTime: '15:00', winRate: '79%', slPrice: 1.1518, tpPrice: 1.1608 },
       ];
   }
 };

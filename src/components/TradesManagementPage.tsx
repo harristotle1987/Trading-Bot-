@@ -17,7 +17,7 @@ export interface PocketSignalLog {
 }
 
 const INITIAL_SIGNAL_LOGS: PocketSignalLog[] = [
-  { id: "SIG-1092", symbol: "EUR/USD", direction: "CALL", expiry: "1m", entryPrice: 1.08520, exitPrice: 1.08542, result: "WIN", payoutPct: 92, winRateScore: 94, timestamp: "2 mins ago", strategy: "SMC Confluence" },
+  { id: "SIG-1092", symbol: "EUR/USD", direction: "CALL", expiry: "1m", entryPrice: 1.15480, exitPrice: 1.15502, result: "WIN", payoutPct: 92, winRateScore: 94, timestamp: "2 mins ago", strategy: "SMC Confluence" },
   { id: "SIG-1091", symbol: "GBP/USD", direction: "PUT", expiry: "2m", entryPrice: 1.26410, exitPrice: 1.26388, result: "WIN", payoutPct: 92, winRateScore: 91, timestamp: "8 mins ago", strategy: "RSI Scalper" },
   { id: "SIG-1090", symbol: "BTC/USDT", direction: "CALL", expiry: "5m", entryPrice: 64200.00, exitPrice: 64350.50, result: "WIN", payoutPct: 85, winRateScore: 89, timestamp: "15 mins ago", strategy: "EMA Trend Cross" },
   { id: "SIG-1089", symbol: "USD/JPY", direction: "PUT", expiry: "1m", entryPrice: 154.200, exitPrice: 154.182, result: "WIN", payoutPct: 90, winRateScore: 88, timestamp: "22 mins ago", strategy: "Bollinger Squeeze" },

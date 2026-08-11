@@ -81,7 +81,7 @@ export default function QuickOrderPanel({ activeSymbol: initialSymbol }: { activ
             symbol: symbolToAnalyze,
             directional_bias: isCall ? 'BUY' : 'SELL',
             win_rate_probability: Math.floor(Math.random() * 6) + 89,
-            suggested_entry: typeof entryP === 'number' ? entryP : 1.0850,
+            suggested_entry: typeof entryP === 'number' ? entryP : 1.1548,
             reasoning: `Confluence Analysis confirmed for ${symbolToAnalyze} using ${selectedStrategies.join(" + ")} (${selectedExpiry} expiry).`
         });
         setIsLoading(false);
