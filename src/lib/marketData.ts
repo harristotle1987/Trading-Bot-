@@ -1,4 +1,3 @@
-import { DEFAULT_MARKET_PRICES } from '../utils/priceUtils';
 import { pusherClient } from './pusher';
 
 // Specialized module for Finnhub (Forex)
@@ -20,27 +19,27 @@ export const FinnhubModule = {
             GBPCAD: 'GBPCAD', CADJPY: 'CADJPY', CHFJPY: 'CHFJPY'
           };
 
-          const calc: Record<string, number> = {
-            EURUSD: quote.EUR ? 1 / quote.EUR : 1.1548,
-            GBPUSD: quote.GBP ? 1 / quote.GBP : 1.3506,
-            USDJPY: quote.JPY ? quote.JPY : 158.95,
-            AUDUSD: quote.AUD ? 1 / quote.AUD : 0.7059,
-            USDCAD: quote.CAD ? quote.CAD : 1.3939,
-            USDCHF: quote.CHF ? quote.CHF : 0.8095,
-            NZDUSD: quote.NZD ? 1 / quote.NZD : 0.5886,
-            EURGBP: (quote.GBP && quote.EUR) ? quote.GBP / quote.EUR : 0.8448,
-            EURJPY: (quote.JPY && quote.EUR) ? quote.JPY / quote.EUR : 167.35,
-            GBPJPY: (quote.JPY && quote.GBP) ? quote.JPY / quote.GBP : 198.10,
-            AUDJPY: (quote.JPY && quote.AUD) ? quote.JPY / quote.AUD : 101.50,
-            EURAUD: (quote.AUD && quote.EUR) ? quote.AUD / quote.EUR : 1.6488,
-            GBPCAD: (quote.CAD && quote.GBP) ? quote.CAD / quote.GBP : 1.7655,
-            CADJPY: (quote.JPY && quote.CAD) ? quote.JPY / quote.CAD : 112.18,
-            CHFJPY: (quote.JPY && quote.CHF) ? quote.JPY / quote.CHF : 174.55
+          const calc: Record<string, number | null> = {
+            EURUSD: quote.EUR ? 1 / quote.EUR : null,
+            GBPUSD: quote.GBP ? 1 / quote.GBP : null,
+            USDJPY: quote.JPY ? quote.JPY : null,
+            AUDUSD: quote.AUD ? 1 / quote.AUD : null,
+            USDCAD: quote.CAD ? quote.CAD : null,
+            USDCHF: quote.CHF ? quote.CHF : null,
+            NZDUSD: quote.NZD ? 1 / quote.NZD : null,
+            EURGBP: (quote.GBP && quote.EUR) ? quote.GBP / quote.EUR : null,
+            EURJPY: (quote.JPY && quote.EUR) ? quote.JPY / quote.EUR : null,
+            GBPJPY: (quote.JPY && quote.GBP) ? quote.JPY / quote.GBP : null,
+            AUDJPY: (quote.JPY && quote.AUD) ? quote.JPY / quote.AUD : null,
+            EURAUD: (quote.AUD && quote.EUR) ? quote.AUD / quote.EUR : null,
+            GBPCAD: (quote.CAD && quote.GBP) ? quote.CAD / quote.GBP : null,
+            CADJPY: (quote.JPY && quote.CAD) ? quote.JPY / quote.CAD : null,
+            CHFJPY: (quote.JPY && quote.CHF) ? quote.JPY / quote.CHF : null
           };
 
           for (const [key, sym] of Object.entries(forexMappings)) {
             if (calc[key]) {
-              const val = calc[key];
+              const val = calc[key]!;
               prices[sym] = val;
               // Clean form with slash
               const withSlash = `${sym.slice(0, 3)}/${sym.slice(3)}`;
@@ -109,11 +108,7 @@ export const ExchangeRateModule = {
           }
         }
       } catch (_) {
-        // Fallback to slight fluctuation from base
-        const base = DEFAULT_MARKET_PRICES[s] || 100;
-        const price = base + (Math.random() - 0.5) * (base * 0.001);
-        prices[s] = parseFloat(price.toFixed(2));
-        prices[`${s} (Stock)`] = parseFloat(price.toFixed(2));
+        // Skip setting price if fetch failed; backend will supply live market prices
       }
     }
     return prices;
@@ -122,7 +117,7 @@ export const ExchangeRateModule = {
 
 // Centralized market data store & event dispatcher
 class MarketDataService {
-  private prices: Record<string, number> = { ...DEFAULT_MARKET_PRICES };
+  private prices: Record<string, number> = {};
   private subscribers = new Set<(prices: Record<string, number>) => void>();
   private isPolling = false;
   private pollIntervalId: any = null;

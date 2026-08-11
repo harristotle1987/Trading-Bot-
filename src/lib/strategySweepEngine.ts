@@ -1,5 +1,6 @@
 import { adminDb } from './firebase';
 import { GoogleGenAI } from '@google/genai';
+import { marketDataService } from './marketData';
 
 export interface StrategyMetric {
   name: string;
@@ -79,35 +80,7 @@ export async function fetch500OHLCVCandles(symbol: string, timeframe: string): P
 
   // If external fetch didn't return 500 candles, generate realistic synthetic 500 bars seeded by symbol
   if (candles.length < 500) {
-    let basePrice = 100;
-    if (cleanSymbol.includes('BTC')) basePrice = 64250;
-    else if (cleanSymbol.includes('ETH')) basePrice = 1925;
-    else if (cleanSymbol.includes('SOL')) basePrice = 77.5;
-    else if (cleanSymbol.includes('XRP')) basePrice = 0.58;
-    else if (cleanSymbol.includes('BNB')) basePrice = 580;
-    else if (cleanSymbol.includes('ADA')) basePrice = 0.38;
-    else if (cleanSymbol.includes('DOGE')) basePrice = 0.12;
-    else if (cleanSymbol.includes('AVAX')) basePrice = 26.5;
-    else if (cleanSymbol.includes('LINK')) basePrice = 14.2;
-    else if (cleanSymbol.includes('DOT')) basePrice = 6.80;
-    else if (cleanSymbol.includes('SUI')) basePrice = 1.85;
-    else if (cleanSymbol.includes('PEPE')) basePrice = 0.0000085;
-    else if (cleanSymbol.includes('SHIB')) basePrice = 0.0000175;
-    else if (cleanSymbol.includes('XAU')) basePrice = 2420.5;
-    else if (cleanSymbol.includes('XAG')) basePrice = 28.4;
-    else if (cleanSymbol.includes('USOIL')) basePrice = 76.5;
-    else if (cleanSymbol.includes('AAPL')) basePrice = 224.5;
-    else if (cleanSymbol.includes('MSFT')) basePrice = 448.2;
-    else if (cleanSymbol.includes('TSLA')) basePrice = 218.4;
-    else if (cleanSymbol.includes('NVDA')) basePrice = 128.5;
-    else if (cleanSymbol.includes('AMZN')) basePrice = 182.6;
-    else if (cleanSymbol.includes('GOOGL')) basePrice = 172.8;
-    else if (cleanSymbol.includes('META')) basePrice = 485.0;
-    else if (cleanSymbol.includes('PLTR')) basePrice = 28.5;
-    else if (cleanSymbol.includes('COIN')) basePrice = 215.0;
-    else if (cleanSymbol.includes('JPY')) basePrice = 158.95;
-    else if (cleanSymbol.includes('GBP')) basePrice = 1.3506;
-    else if (cleanSymbol.includes('EUR') || cleanSymbol.length === 6) basePrice = 1.1548;
+    let basePrice = candles.length > 0 ? candles[candles.length - 1].close : (marketDataService.getPrices()[cleanSymbol] || 100);
 
     const now = Date.now();
     const timeframeMs = timeframe === '1h' ? 3600000 : timeframe === '4h' ? 14400000 : timeframe === '1d' ? 86400000 : 900000;

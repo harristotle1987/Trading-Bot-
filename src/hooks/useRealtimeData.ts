@@ -1,18 +1,9 @@
 import { useState, useEffect } from 'react';
 import { pusherClient as pusherInstance } from '../lib/pusher';
 
-const DEFAULT_PRICES: Record<string, number> = {
-    "BTCUSDT": 64250.00, "ETHUSDT": 1925.00, "SOLUSDT": 77.50, "XRPUSDT": 0.58, "BNBUSDT": 580.00,
-    "ADAUSDT": 0.38, "DOGEUSDT": 0.12, "AVAXUSDT": 26.50, "LINKUSDT": 14.20, "DOTUSDT": 6.80,
-    "NEARUSDT": 5.10, "SUIUSDT": 1.85, "APTUSDT": 8.40, "MATICUSDT": 0.52, "LTCUSDT": 72.00,
-    "UNIUSDT": 7.80, "ATOMUSDT": 6.20, "ETCUSDT": 21.00, "FILUSDT": 4.80, "ARBUSDT": 0.62,
-    "EURUSD": 1.1548, "GBPUSD": 1.3506, "USDJPY": 158.95, "AUDUSD": 0.7059, "USDCAD": 1.3939,
-    "USDCHF": 0.8095, "NZDUSD": 0.5886, "EURGBP": 0.8550, "EURJPY": 183.56, "GBPJPY": 214.68,
-    "AUDJPY": 112.20, "EURAUD": 1.6360, "GBPCAD": 1.8820, "CADJPY": 114.00, "CHFJPY": 196.35,
-    "AAPL": 224.50, "MSFT": 448.20, "TSLA": 218.40, "AMZN": 182.60, "GOOGL": 172.80, "NVDA": 128.50, "META": 485.00
-};
+const DEFAULT_PRICES: Record<string, number> = {};
 
-let globalPrices: Record<string, number> = { ...DEFAULT_PRICES };
+let globalPrices: Record<string, number> = {};
 let globalPositions: any[] = [];
 let listeners: Function[] = [];
 let isSubscribed = false;
