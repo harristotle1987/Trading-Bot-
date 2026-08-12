@@ -99,7 +99,7 @@ export default function LiveAPITesterModal({ isOpen, onClose }: { isOpen: boolea
 
   const PROD_ORIGIN = "https://trading-bot-ten-rho.vercel.app";
   const CURRENT_ORIGIN = typeof window !== "undefined" ? window.location.origin : "";
-  const [targetOrigin, setTargetOrigin] = useState(PROD_ORIGIN);
+  const [targetOrigin, setTargetOrigin] = useState(CURRENT_ORIGIN || "");
   const [hasCorsError, setHasCorsError] = useState(false);
 
   if (!isOpen) return null;
