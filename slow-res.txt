@@ -1,0 +1,4 @@
+METHOD: POST   URL: /api/ai/evaluate-pair                    STATUS: 200 PASS/FAIL: PASS
+METHOD: POST   URL: /api/ai/transcripts/ingest               STATUS: 500 PASS/FAIL: FAIL
+METHOD: GET    URL: /api/market/kline?symbol=BTCUSDT         STATUS: ERROR PASS/FAIL: FAIL
+  Error: The read operation timed out

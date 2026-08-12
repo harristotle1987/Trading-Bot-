@@ -48,12 +48,45 @@
         }
       },
       "required": ["sweepId", "symbol", "status", "createdAt"]
+    },
+    "SignalOutcome": {
+      "title": "SignalOutcome",
+      "description": "Persistent training and validation dataset recording signal attributes and ultimate outcomes",
+      "type": "object",
+      "properties": {
+        "signal_id": { "type": "string" },
+        "symbol": { "type": "string" },
+        "timeframe": { "type": "string" },
+        "direction": { "type": "string" },
+        "entry": { "type": "number" },
+        "timestamp": { "type": "number" },
+        "market_regime": { "type": "string" },
+        "strategy_results": { "type": "object" },
+        "strategy_agreement": { "type": "number" },
+        "signal_score": { "type": "number" },
+        "expected_value": { "type": "number" },
+        "ml_probability": { "type": "number" },
+        "expiry": { "type": "number" },
+        "outcome": { "type": "string", "enum": ["WIN", "LOSS", "EXPIRED", "INVALIDATED", "UNRESOLVED"] },
+        "outcome_price": { "type": "number" },
+        "result": { "type": "string" },
+        "R_multiple": { "type": "number" },
+        "payout": { "type": "number" },
+        "duration": { "type": "number" },
+        "created_at": { "type": "string" },
+        "resolved_at": { "type": "string" }
+      },
+      "required": ["signal_id", "symbol", "timeframe", "direction", "entry", "timestamp", "market_regime", "signal_score", "outcome", "created_at"]
     }
   },
   "firestore": {
     "strategy_sweeps/{sweepId}": {
       "schema": "StrategySweep",
       "description": "Stores offline multi-strategy backtest sweep jobs and AI recommendations"
+    },
+    "signals/{signalId}": {
+      "schema": "SignalOutcome",
+      "description": "Persistent signal execution logs and eventual trade resolutions"
     }
   }
 }

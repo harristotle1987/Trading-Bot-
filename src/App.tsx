@@ -5,14 +5,17 @@
 
 import { useState, useEffect } from "react";
 import { Toaster } from "sonner";
-import { LineChart, Briefcase, Zap, Cpu, Loader2 } from "lucide-react";
+import { LineChart, Briefcase, Zap, Cpu, Loader2, Sliders, Activity } from "lucide-react";
 import TradesManagementPage from "./components/TradesManagementPage";
 import InteractiveChartsWorkspace from "./components/InteractiveChartsWorkspace";
 import TopNavbar from "./components/TopNavbar";
 import HistoricalTradesModal from "./components/HistoricalTradesModal";
 import QuickOrderPanel from "./components/QuickOrderPanel";
 import PocketSignalsWorkspace from "./components/PocketSignalsWorkspace";
+import MT4SignalAdapterTester from "./components/MT4SignalAdapterTester";
 import StrategyStudioWorkspace from "./components/StrategyStudioWorkspace";
+import MLWorkspace from "./components/MLWorkspace";
+import PaperSignalsWorkspace from "./components/PaperSignalsWorkspace";
 import { PWAInstallNotification } from "./components/PWAInstallNotification";
 
 export const TRADABLE_PAIRS = [
@@ -49,6 +52,8 @@ export const TRADABLE_PAIRS = [
 const NAV_ITEMS = [
   { id: "Signals", label: "Signals", icon: Zap },
   { id: "Strategies", label: "Strategies", icon: Cpu },
+  { id: "ML", label: "ML Engine", icon: Sliders },
+  { id: "PaperSignals", label: "Paper Mode", icon: Activity },
   { id: "Charts", label: "Charts", icon: LineChart },
   { id: "Journal", label: "Journal", icon: Briefcase }
 ];
@@ -220,6 +225,12 @@ export default function App() {
               onActivateStrategy={handleActivateStrategy}
               onNavigateToSignals={() => setActiveTab("Signals")}
             />
+          ) : activeTab === "ML" ? (
+            <MLWorkspace />
+          ) : activeTab === "PaperSignals" ? (
+            <PaperSignalsWorkspace />
+          ) : activeTab === "MT4Adapter" ? (
+            <MT4SignalAdapterTester />
           ) : activeTab === "Charts" ? (
             <InteractiveChartsWorkspace initialSymbol={chartFocusSymbol} />
           ) : (

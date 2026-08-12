@@ -19,7 +19,7 @@ export default function StrategyStudioWorkspace({
 }: StrategyStudioWorkspaceProps) {
   const [selectedStrategyId, setSelectedStrategyId] = useState<string>('day-trading');
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('15m');
-  const [minWinRateFilter, setMinWinRateFilter] = useState<number>(85);
+  const [minWinRateFilter, setMinWinRateFilter] = useState<number>(20);
   const [customParams, setCustomParams] = useState<Record<string, string | number>>({});
   const [isSimulating, setIsSimulating] = useState<boolean>(false);
 
@@ -38,7 +38,7 @@ export default function StrategyStudioWorkspace({
     setTimeout(() => {
       setIsSimulating(false);
       toast.success(`Strategy Simulation Complete for ${selectedStrategy.name} [${selectedTimeframe}]`, {
-        description: `Backtested across 2,400 live candles. Simulated Win Rate: ${(selectedStrategy.defaultWinRate + (Math.random() * 1.5 - 0.75)).toFixed(1)}%.`
+        description: `Backtested across 2,400 live candles. Simulated Win Rate: ${selectedStrategy.defaultWinRate.toFixed(1)}%.`
       });
     }, 1200);
   };
@@ -306,14 +306,14 @@ export default function StrategyStudioWorkspace({
               </label>
               <input
                 type="range"
-                min="80"
+                min="20"
                 max="98"
                 value={minWinRateFilter}
                 onChange={(e) => setMinWinRateFilter(Number(e.target.value))}
                 className="w-full accent-[#3DDBD9] bg-[#181D26] rounded-lg h-2 cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-[#838C9C] font-mono">
-                <span>80% (More Signals)</span>
+                <span>20% (More Signals)</span>
                 <span>98% (Ultra High Accuracy)</span>
               </div>
             </div>

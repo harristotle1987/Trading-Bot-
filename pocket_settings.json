@@ -1,0 +1,18 @@
+{
+  "lotSize": 0.01,
+  "selectedTimeframe": "30m",
+  "selectedStrategies": [
+    "DAY_TRADING"
+  ],
+  "customDocText": "",
+  "savedSignals": [],
+  "signalGeneratorSettings": {
+    "symbol": "EUR/USD",
+    "isOtc": false,
+    "strategyName": "Day Trading",
+    "timeframe": "30m"
+  },
+  "minWinRate": 80,
+  "selectedAssetType": "ALL",
+  "savedAt": "2026-08-12T08:18:36.731Z"
+}

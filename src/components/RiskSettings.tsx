@@ -8,7 +8,7 @@ export default function RiskSettings() {
   
   const [autoTrade, setAutoTrade] = useState({
       active: false,
-      min_profit_threshold: 0.75,
+      min_profit_threshold: 0.20,
       trade_capital_alloc: 1000,
       sl_threshold_pct: 0.02,
       tp_threshold_pct: 0.06,
@@ -412,7 +412,7 @@ export default function RiskSettings() {
                             <label className="text-xs text-[#838C9C] uppercase tracking-wider font-bold">AI Profitability Threshold</label>
                             <span className="text-[#3DDBD9] text-sm font-bold">{(autoTrade.min_profit_threshold * 100).toFixed(0)}%</span>
                         </div>
-                        <input type="range" name="min_profit_threshold" min="0.5" max="0.95" step="0.01" value={autoTrade.min_profit_threshold} onChange={handleAutoTradeChange} className="w-full accent-[#3DDBD9]" />
+                        <input type="range" name="min_profit_threshold" min="0.20" max="0.95" step="0.01" value={autoTrade.min_profit_threshold} onChange={handleAutoTradeChange} className="w-full accent-[#3DDBD9]" />
                     </div>
 
                     <div className="flex flex-col gap-2">

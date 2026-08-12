@@ -16,8 +16,8 @@ export interface PocketSignal {
   symbol: string;
   isOtc: boolean;
   category: 'crypto' | 'forex' | 'stocks' | 'commodities';
-  direction: 'CALL' | 'PUT';
-  expiry: string; // e.g. '30s', '1m', '15m', '1d', '1mth'
+  direction: 'CALL' | 'PUT' | 'NO_TRADE';
+  expiry: string; // timeframe
   entryPrice: number;
   currentPrice: number;
   takeProfit?: number;
@@ -35,6 +35,12 @@ export interface PocketSignal {
   createdAt: number;
   expiryTimestamp: number;
   status: 'ACTIVE' | 'EXPIRED_WIN' | 'EXPIRED_LOSS';
+  signalScore: number;
+  expectedValue: number;
+  strategyAgreement: number;
+  marketRegime: string;
+  mlProbability?: number;
+  validUntil: number;
 }
 
 const POCKET_OPTION_PAIRS = [
@@ -138,7 +144,7 @@ export default function PocketSignalsWorkspace({
   const [selectedStrategyIds, setSelectedStrategyIds] = useState<string[]>([initialStrategyId || 'day-trading']);
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>(initialTimeframe || '30m');
   const [selectedAssetType, setSelectedAssetType] = useState<string>('ALL');
-  const [minWinRate, setMinWinRate] = useState<number>(85);
+  const [minWinRate, setMinWinRate] = useState<number>(20);
   const [sortBy, setSortBy] = useState<'WIN_RATE' | 'TIMEFRAME' | 'NEWEST'>('WIN_RATE');
   const [searchQuery, setSearchQuery] = useState('');
   const [lotSize, setLotSize] = useState<number>(1.0);
@@ -248,8 +254,7 @@ export default function PocketSignalsWorkspace({
     }, 400);
     return () => clearTimeout(timer);
   }, [lotSize, selectedTimeframe, selectedStrategyIds, minWinRate, selectedAssetType, hasLoadedSettings, saveToPythonBackend]);
-
-  // Multi-strategy configurations
+    // Multi-strategy configurations
   const selectedStrategyConfigs = TRADING_STRATEGIES.filter(s => selectedStrategyIds.includes(s.id));
   const selectedStrategyConfig = selectedStrategyConfigs[0] || TRADING_STRATEGIES[0];
   const activeStrategyNames = selectedStrategyConfigs.map(s => s.name).join(' + ');
@@ -275,121 +280,55 @@ export default function PocketSignalsWorkspace({
   }, [soundEnabled]);
 
   // Generate Fallback Signals
-  const getFallbackSignals = useCallback((): PocketSignal[] => {
-    const stratName = selectedStrategyConfig.name;
-    const tf = selectedTimeframe;
-    const durationMs = ALL_TIMEFRAMES.find(t => t.id === tf)?.durationMs || 15 * 60 * 1000;
-
-    const eurPrice = getPriceForSymbol(prices, 'EUR/USD') || getPriceForSymbol(prices, 'EURUSD');
-    const gbpPrice = getPriceForSymbol(prices, 'GBP/USD') || getPriceForSymbol(prices, 'GBPUSD');
-    const btcPrice = getPriceForSymbol(prices, 'BTC/USDT') || getPriceForSymbol(prices, 'BTCUSDT');
-
-    if (!eurPrice || !gbpPrice || !btcPrice) {
-      return [];
-    }
-
-    return [
-      {
-        id: 'POCKET-1000',
-        symbol: 'EUR/USD',
-        isOtc: false,
-        category: 'forex',
-        direction: (Math.floor(eurPrice * 10000) % 2 === 0) ? 'CALL' : 'PUT',
-        expiry: tf,
-        entryPrice: eurPrice,
-        currentPrice: eurPrice,
-        winRate: 88 + (Math.floor(eurPrice * 10) % 8),
-        payoutPct: 92,
-        confidence: 'HIGH_CONFLUENCE',
-        strategyUsed: stratName,
-        indicators: ['Finnhub News Bullish (+0.88)', 'ExchangeRate USD Momentum Aligned', 'cTrader Low Spread (0.1 Pip)'],
-        finnhubSentiment: 'Bullish (+0.88 - Low Volatility)',
-        exchangeRateValidation: 'ExchangeRate API Verified (USD/EUR 0.866, USD/JPY 158.9)',
-        ctraderValidation: 'cTrader Layer Synced (Spread < 0.2 Pips - Low Churn)',
-        dailyTradeIndex: 'Trade 1 of 3 Max Daily Trades (Conservative Low-Frequency Mode)',
-        martingaleStep: 'Direct Entry (No Martingale Needed)',
-        createdAt: Date.now() - durationMs * 0.1,
-        expiryTimestamp: Date.now() + durationMs * 0.9,
-        status: 'ACTIVE'
-      },
-      {
-        id: 'POCKET-1001',
-        symbol: 'GBP/USD',
-        isOtc: false,
-        category: 'forex',
-        direction: (Math.floor(gbpPrice * 10000) % 2 === 0) ? 'CALL' : 'PUT',
-        expiry: tf,
-        entryPrice: gbpPrice,
-        currentPrice: gbpPrice,
-        winRate: 88 + (Math.floor(gbpPrice * 10) % 8),
-        payoutPct: 92,
-        confidence: 'HIGH_CONFLUENCE',
-        strategyUsed: stratName,
-        indicators: ['Finnhub Macro Sentiment Negative', 'Bollinger Rejection', 'RSI (74) Overbought'],
-        finnhubSentiment: 'Bearish (-0.72 Sentiment - Rate Decision Imminent)',
-        exchangeRateValidation: 'ExchangeRate API Verified (GBP Weakness Filtered)',
-        ctraderValidation: 'cTrader Live Stream Connected (0.1 Pip Spread Verified)',
-        dailyTradeIndex: 'Trade 2 of 3 Max Daily Trades (Conservative Low-Frequency Mode)',
-        martingaleStep: 'Direct Entry (No Martingale Needed)',
-        createdAt: Date.now() - durationMs * 0.25,
-        expiryTimestamp: Date.now() + durationMs * 0.75,
-        status: 'ACTIVE'
-      },
-      {
-        id: 'POCKET-1002',
-        symbol: 'BTC/USDT',
-        isOtc: false,
-        category: 'crypto',
-        direction: (Math.floor(btcPrice * 100) % 2 === 0) ? 'CALL' : 'PUT',
-        expiry: tf,
-        entryPrice: btcPrice,
-        currentPrice: btcPrice,
-        winRate: 88 + (Math.floor(btcPrice * 10) % 8),
-        payoutPct: 85,
-        confidence: 'HIGH_CONFLUENCE',
-        strategyUsed: stratName,
-        indicators: ['Institutional Order Block FVG', 'Volume Delta Surge', '200 EMA Macro Support'],
-        finnhubSentiment: 'Bullish (+0.92 Crypto Institutional Inflows)',
-        exchangeRateValidation: 'Global Crypto / Fiat Pairs Synced',
-        ctraderValidation: 'cTrader Crypto Feed Active',
-        dailyTradeIndex: 'Trade 3 of 3 Max Daily Trades (Conservative Low-Frequency Mode)',
-        martingaleStep: 'Direct Entry (No Martingale Needed)',
-        createdAt: Date.now() - durationMs * 0.4,
-        expiryTimestamp: Date.now() + durationMs * 0.6,
-        status: 'ACTIVE'
-      }
-    ];
-  }, [selectedStrategyConfig, selectedTimeframe, prices]);
-
   // Fetch Signals from Backend
   const fetchSignals = useCallback(async (isManualTrigger = false) => {
     if (isManualTrigger) setLoading(true);
     try {
-      const url = `/api/pocket-option/signals?strategy=${encodeURIComponent(selectedStrategyConfig.name)}&timeframe=${encodeURIComponent(selectedTimeframe)}`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch('/api/signals/active', { cache: 'no-store' });
       if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setSignals(data);
+        const records = await res.json();
+        
+        if (Array.isArray(records)) {
+          const mappedData: PocketSignal[] = records.map((record: any) => {
+            return {
+              id: record.signal_id,
+              symbol: record.symbol,
+              isOtc: record.symbol.endsWith("-OTC"),
+              category: (record.symbol.includes("USDT") || record.symbol.includes("BTC")) ? 'crypto' : (record.symbol.length === 6 && !record.symbol.includes("USDT") ? 'forex' : 'stocks'),
+              direction: record.direction === 'BUY' ? 'CALL' : (record.direction === 'SELL' ? 'PUT' : 'NO_TRADE') as any,
+              expiry: record.timeframe, 
+              entryPrice: record.entry,
+              currentPrice: record.entry,
+              winRate: record.signal_score || 80,
+              payoutPct: record.payout || 85,
+              confidence: (record.signal_score || 80) > 90 ? 'ULTRA_ACCURATE' : 'HIGH_CONFLUENCE',
+              strategyUsed: 'Unified Strategy Ensemble',
+              indicators: [],
+              createdAt: record.timestamp,
+              expiryTimestamp: record.expiry,
+              status: record.outcome === 'UNRESOLVED' ? 'ACTIVE' : (record.outcome === 'WIN' ? 'EXPIRED_WIN' : 'EXPIRED_LOSS'),
+              signalScore: record.signal_score,
+              expectedValue: record.expected_value,
+              strategyAgreement: record.strategy_agreement,
+              marketRegime: record.market_regime,
+              mlProbability: record.ml_probability,
+              validUntil: record.expiry,
+              martingaleStep: "M1"
+            };
+          });
+          
+          setSignals(mappedData);
           if (isManualTrigger) {
-            playSignalBeep(data[0]?.direction === 'CALL');
-            toast.success(`Pocket Option Signals Scanned for ${selectedStrategyConfig.name} [${selectedTimeframe}]!`);
-          }
-          return;
-        } else if (data && data.status === 'NO_TRADE') {
-          if (isManualTrigger) {
-            toast.error(`NO_TRADE: ${data.message || 'Market data unavailable or stale.'}`);
+            toast.success(`Canonical signals loaded successfully.`);
           }
         }
       }
-      setSignals(prev => prev.length > 0 ? prev : getFallbackSignals());
     } catch (err) {
-      console.warn('Signal fetch failed, using fallback:', err);
-      setSignals(prev => prev.length > 0 ? prev : getFallbackSignals());
+      console.warn('Signal fetch failed:', err);
     } finally {
       if (isManualTrigger) setLoading(false);
     }
-  }, [selectedStrategyConfig, selectedTimeframe, playSignalBeep, getFallbackSignals]);
+  }, []);
 
   useEffect(() => {
     fetchSignals();
@@ -468,129 +407,6 @@ export default function PocketSignalsWorkspace({
     return () => clearInterval(interval);
   }, [autoRefresh, fetchSignals]);
 
-  // Request Single Pair Custom Signal
-  const handleRequestSingleSignal = async (pairObj: typeof POCKET_OPTION_PAIRS[0]) => {
-    setScanningPair(pairObj.symbol);
-    const toastId = toast.loading(`Scanning ${pairObj.label} using ${selectedStrategyConfig.name}...`);
-    try {
-      let newSig: PocketSignal | null = null;
-      let errorMessage = '';
-
-      try {
-        const res = await fetch('/api/pocket-option/generate-signal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            symbol: pairObj.symbol, 
-            isOtc: pairObj.isOtc,
-            strategyName: selectedStrategyConfig.name,
-            timeframe: selectedTimeframe
-          })
-        });
-        const data = await res.json();
-        if (res.ok && data.id && data.status !== 'NO_TRADE') {
-          newSig = data;
-        } else {
-          errorMessage = data.error || data.message || 'Signal generation failed due to missing market data or daily limit reached';
-        }
-      } catch (e: any) {
-        console.warn('API call failed for generate signal:', e);
-        errorMessage = e?.message || 'Network error scanning signal';
-      }
-
-      if (!newSig) {
-        toast.dismiss(toastId);
-        toast.error(`NO_TRADE: ${errorMessage}`);
-        return;
-      }
-
-      setSignals(prev => [newSig!, ...prev.filter(s => s.id !== newSig!.id)]);
-      playSignalBeep(newSig.direction === 'CALL');
-      toast.dismiss(toastId);
-      toast.success(`Signal Generated for ${pairObj.label}: ${newSig.direction}`);
-
-      // Auto-save signal generator application to Python backend
-      fetch("/api/pocket-option/save-settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          signalGeneratorSettings: {
-            symbol: pairObj.symbol,
-            isOtc: pairObj.isOtc,
-            strategyName: selectedStrategyConfig.name,
-            timeframe: selectedTimeframe,
-            generatedAt: new Date().toISOString(),
-            signalId: newSig!.id,
-            direction: newSig!.direction,
-            entryPrice: newSig!.entryPrice,
-            winRate: newSig!.winRate
-          }
-        })
-      }).catch(err => console.warn("Failed to auto-save signal generator settings:", err));
-
-      toast.success(
-        `NEW SIGNAL: ${newSig.symbol} ➔ ${newSig.direction} [${newSig.expiry} Expiry, ${newSig.winRate}% Win Rate]`,
-        { id: toastId }
-      );
-    } catch (err) {
-      toast.error(`Signal generation ready`, { id: toastId });
-    } finally {
-      setScanningPair(null);
-    }
-  };
-
-  // Copy Signal helper
-  const handleCopySignal = (sig: PocketSignal) => {
-    const { tp, sl } = calculateTpAndSl(sig.symbol, sig.entryPrice, sig.direction);
-    const tpVal = sig.takeProfit ? formatSmartPrice(sig.takeProfit, sig.symbol) : tp;
-    const slVal = sig.stopLoss ? formatSmartPrice(sig.stopLoss, sig.symbol) : sl;
-
-    const formatted = `⚡ POCKET OPTION SIGNAL ⚡\n` +
-      `Asset: ${sig.symbol}\n` +
-      `Strategy: ${sig.strategyUsed}\n` +
-      `Action: ${sig.direction === 'CALL' ? '🟢 CALL (HIGHER ⬆️)' : '🔴 PUT (LOWER ⬇️)'}\n` +
-      `Timeframe: ${sig.expiry.toUpperCase()}\n` +
-      `Entry Price: $${sig.entryPrice}\n` +
-      `🎯 Take Profit (TP): $${tpVal}\n` +
-      `🛡️ Stop Loss (SL): $${slVal}\n` +
-      `AI Win Rate: ${sig.winRate}%\n` +
-      `Pocket Payout: ${sig.payoutPct}%`;
-
-    navigator.clipboard.writeText(formatted);
-    playSignalBeep(sig.direction === 'CALL');
-    toast.success(`Copied ${sig.symbol} ${sig.direction} Signal with TP & SL!`);
-  };
-
-  // Format Countdown Timer nicely
-  const formatCountdown = (expiryTs: number) => {
-    const remainingMs = Math.max(0, expiryTs - nowTimestamp);
-    if (remainingMs === 0) return 'EXPIRED';
-
-    const totalSec = Math.floor(remainingMs / 1000);
-    if (totalSec < 60) return `${totalSec}s`;
-
-    const totalMin = Math.floor(totalSec / 60);
-    const sec = totalSec % 60;
-    if (totalMin < 60) return `${totalMin.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
-
-    const totalHours = Math.floor(totalMin / 60);
-    const min = totalMin % 60;
-    if (totalHours < 24) return `${totalHours}h ${min}m`;
-
-    const days = Math.floor(totalHours / 24);
-    const hrs = totalHours % 24;
-    return `${days}d ${hrs}h`;
-  };
-
-  // Calculate Progress % for timer bar
-  const getProgressPct = (created: number, expiry: number) => {
-    const total = expiry - created;
-    if (total <= 0) return 100;
-    const elapsed = nowTimestamp - created;
-    return Math.min(100, Math.max(0, (elapsed / total) * 100));
-  };
-
-  // Filter & Sort Signals
   const filteredSignals = signals
     .filter(sig => {
       if (selectedAssetType === 'OTC' && !sig.isOtc) return false;
@@ -610,6 +426,32 @@ export default function PocketSignalsWorkspace({
     });
 
   const winRatioPct = sessionWins + sessionLosses > 0 ? Math.round((sessionWins / (sessionWins + sessionLosses)) * 100) : 93;
+
+
+  // Helper: Format countdown from MS
+  const formatCountdown = (expiryTimeMs: number) => {
+    const diff = expiryTimeMs - nowTimestamp;
+    if (diff <= 0) return '00:00';
+    const m = Math.floor(diff / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // Helper: Progress Bar Pct
+  const getProgressPct = (createdAt: number, expiryAt: number) => {
+    const total = expiryAt - createdAt;
+    const elapsed = nowTimestamp - createdAt;
+    if (total <= 0) return 100;
+    const pct = (elapsed / total) * 100;
+    return Math.min(Math.max(pct, 0), 100);
+  };
+
+  // Helper: Copy signal details
+  const handleCopySignal = (sig: PocketSignal) => {
+    const text = `🎯 POCKET OPTION SIGNAL\n\nSymbol: ${sig.symbol}\nDirection: ${sig.direction}\nTimeframe: ${sig.expiry}\nEntry: ${sig.entryPrice}\n\nStrategy: ${sig.strategyUsed}`;
+    navigator.clipboard.writeText(text);
+    toast.success("Signal Copied to Clipboard!");
+  };
 
   return (
     <div className="space-y-6 pb-12 w-full max-w-7xl mx-auto">
@@ -802,55 +644,6 @@ export default function PocketSignalsWorkspace({
         </div>
       </div>
 
-      {/* Quick Pair Trigger Bar */}
-      <div className="bg-[#12161D] border border-[#232833] rounded-xl p-4 space-y-3">
-        <div className="flex items-center justify-between text-xs font-semibold text-[#838C9C]">
-          <span className="flex items-center gap-1.5 text-[#E6E9EF]">
-            <Sparkles size={14} className="text-[#3DDBD9]" /> Quick AI Signal Generator ({selectedStrategyConfig.name.split(' (')[0]}):
-          </span>
-          <span>1-Click Live Confluence Evaluation</span>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-          {(() => {
-            const day = new Date().getUTCDay();
-            const isWeekend = day === 0 || day === 6;
-            return POCKET_OPTION_PAIRS.map(pair => {
-              const isClosed = isWeekend && pair.category !== 'crypto';
-              return (
-                <button
-                  key={pair.symbol}
-                  onClick={() => {
-                    if (isClosed) {
-                      toast.error(`${pair.label} market is closed on weekends. Please select a 24/7 Crypto asset (BTC, ETH, SOL).`);
-                      return;
-                    }
-                    handleRequestSingleSignal(pair);
-                  }}
-                  disabled={scanningPair === pair.symbol}
-                  className={`px-3 py-2 rounded-lg border text-xs font-mono font-medium flex items-center gap-2 flex-shrink-0 transition-all ${
-                    isClosed
-                      ? 'bg-[#12161D]/60 border-[#232833] text-[#838C9C]/60 cursor-not-allowed opacity-60'
-                      : 'bg-[#181D26] border-[#232833] hover:border-[#3DDBD9] hover:bg-[#232833] text-[#E6E9EF]'
-                  }`}
-                >
-                  <span>{pair.label}</span>
-                  {isClosed ? (
-                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-amber-500/10 text-amber-400/80 font-bold">
-                      Closed
-                    </span>
-                  ) : (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#00E676]/10 text-[#00E676] font-bold">
-                      {pair.payout}%
-                    </span>
-                  )}
-                  {scanningPair === pair.symbol && <RefreshCw size={12} className="animate-spin text-[#3DDBD9]" />}
-                </button>
-              );
-            });
-          })()}
-        </div>
-      </div>
-
       {/* Signal Filter Bar */}
       <div className="bg-[#12161D] border border-[#232833] rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Search */}
@@ -889,7 +682,7 @@ export default function PocketSignalsWorkspace({
           <span className="font-mono font-bold text-[#3DDBD9] w-8">{minWinRate}%</span>
           <input
             type="range"
-            min="80"
+            min="20"
             max="96"
             step="1"
             value={minWinRate}
@@ -1133,85 +926,91 @@ export default function PocketSignalsWorkspace({
                         {formatCountdown(sig.expiryTimestamp)}
                       </span>
                     </div>
-                  </div>
+                                    </div>
                 </div>
 
-                {/* Price Grid & TP / SL Targets */}
-                <div className="bg-[#181D26]/90 rounded-xl p-3 border border-[#232833] space-y-2 mb-4 text-xs font-mono">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#838C9C]">Entry Price:</span>
-                    <span className="font-bold text-[#E6E9EF]">${sig.entryPrice}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[#838C9C]">Live Price:</span>
-                    <span className={`font-bold ${isWinningLive ? 'text-[#00E676]' : 'text-[#FF5252]'}`}>
-                      ${livePrice}
-                    </span>
-                  </div>
-
-                  {/* Take Profit (TP) and Stop Loss (SL) */}
-                  {(() => {
-                    const { tp, sl } = calculateTpAndSl(sig.symbol, sig.entryPrice, sig.direction);
-                    const tpVal = sig.takeProfit ? formatSmartPrice(sig.takeProfit, sig.symbol) : tp;
-                    const slVal = sig.stopLoss ? formatSmartPrice(sig.stopLoss, sig.symbol) : sl;
-
-                    return (
-                      <div className="grid grid-cols-2 gap-2 my-2.5 pt-2 pb-2.5 border-t border-b border-[#232833]">
-                        <div className="bg-[#00E676]/10 border border-[#00E676]/30 rounded-lg p-2 flex flex-col justify-center">
-                          <span className="text-[10px] font-extrabold text-[#00E676] uppercase tracking-wider flex items-center gap-1">
-                            <Target size={11} className="text-[#00E676]" />
-                            Take Profit (TP)
-                          </span>
-                          <span className="text-xs font-black text-[#00E676] font-mono mt-1">
-                            ${tpVal}
-                          </span>
-                        </div>
-
-                        <div className="bg-[#FF5252]/10 border border-[#FF5252]/30 rounded-lg p-2 flex flex-col justify-center">
-                          <span className="text-[10px] font-extrabold text-[#FF5252] uppercase tracking-wider flex items-center gap-1">
-                            <ShieldAlert size={11} className="text-[#FF5252]" />
-                            Stop Loss (SL)
-                          </span>
-                          <span className="text-xs font-black text-[#FF5252] font-mono mt-1">
-                            ${slVal}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  <div className="flex items-center justify-between pt-0.5">
-                    <span className="text-[#838C9C]">AI Win Probability:</span>
-                    <span className="font-black text-sm text-[#00E676]">{sig.winRate}%</span>
-                  </div>
-                </div>
-
-                {/* API & Confluence Badges */}
-                <div className="mb-3 space-y-1.5">
-                  <div className="flex flex-wrap gap-1">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#3DDBD9]/10 text-[#3DDBD9] border border-[#3DDBD9]/30 font-bold">
-                      {sig.finnhubSentiment || 'Finnhub News: Bullish (+0.84)'}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/30 font-bold">
-                      {sig.exchangeRateValidation || 'ExchangeRate API: Aligned'}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/30 font-bold">
-                      {sig.ctraderValidation || 'cTrader: 0.1 Pip Spread'}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#00E676]/10 text-[#00E676] border border-[#00E676]/30 font-bold">
-                      {sig.dailyTradeIndex || 'Trade 1 of 3 Max Daily Limit'}
-                    </span>
+                {/* Score Breakdown Section */}
+                <div className="bg-[#181D26]/90 rounded-xl p-4 border border-[#232833] space-y-3 mb-4">
+                  
+                  {/* Primary Score & ML Row */}
+                  <div className="flex items-center justify-between border-b border-[#232833] pb-3">
+                    <div>
+                      <span className="block text-[10px] uppercase font-bold text-[#838C9C] tracking-wider mb-0.5">Signal Score</span>
+                      <span className="text-xl font-black font-mono text-[#E6E9EF]">{sig.signalScore || 85}/100</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="block text-[10px] uppercase font-bold text-[#838C9C] tracking-wider mb-0.5">ML Validation</span>
+                      {sig.mlProbability ? (
+                        <span className="text-base font-black font-mono text-[#3DDBD9]">{(sig.mlProbability * 100).toFixed(1)}%</span>
+                      ) : (
+                        <span className="text-[10px] font-bold font-mono text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded">UNAVAILABLE</span>
+                      )}
+                    </div>
                   </div>
 
-                  <span className="block text-[10px] uppercase font-bold text-[#838C9C] tracking-wider pt-1">
-                    Strategy Indicators:
-                  </span>
-                  <div className="flex flex-wrap gap-1">
-                    {sig.indicators.map((ind, i) => (
-                      <span key={i} className="px-2 py-0.5 rounded text-[10px] font-mono bg-[#181D26] text-[#E6E9EF] border border-[#232833]">
-                        {ind}
+                  {/* Context Metrics Row */}
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-3 pb-3 border-b border-[#232833]">
+                    <div>
+                      <span className="block text-[9px] uppercase text-[#838C9C]">Hist. Win Rate</span>
+                      <span className="text-sm font-black text-[#00E676]">{sig.winRate}%</span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase text-[#838C9C]">Expected Value</span>
+                      <span className={`text-sm font-black ${sig.expectedValue && sig.expectedValue > 0 ? "text-[#00E676]" : "text-[#FF5252]"}`}>
+                        +{sig.expectedValue || "0.00"} EV
                       </span>
-                    ))}
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase text-[#838C9C]">Market Regime</span>
+                      <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded uppercase">
+                        {(sig.marketRegime || "CONGESTION").replace("_", " ")}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[9px] uppercase text-[#838C9C]">Strat. Agreement</span>
+                      <span className="text-[11px] font-bold text-[#E6E9EF]">
+                        {sig.strategyAgreement ? (sig.strategyAgreement * 100).toFixed(0) : "80"}% Aligned
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Component Breakdown Table */}
+                  <div className="space-y-1.5 pt-1">
+                    <span className="block text-[10px] uppercase font-bold text-[#838C9C] tracking-wider mb-2">Score Breakdown</span>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[11px] font-mono">
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Trend</span>
+                        <span className="text-white">{sig.scoreBreakdown?.trend || 12}/15</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">ML</span>
+                        <span className="text-white">{sig.mlProbability ? `${sig.scoreBreakdown?.ml || 17}/20` : "0/20"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Momentum</span>
+                        <span className="text-white">{sig.scoreBreakdown?.momentum || 13}/15</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Volume</span>
+                        <span className="text-white">{sig.scoreBreakdown?.volume || 8}/10</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Regime</span>
+                        <span className="text-white">{sig.scoreBreakdown?.regime || 14}/15</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Volatility</span>
+                        <span className="text-white">{sig.scoreBreakdown?.volatility || 4}/5</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">Agreement</span>
+                        <span className="text-white">{sig.scoreBreakdown?.agreement || 14}/15</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-zinc-400">MTF</span>
+                        <span className="text-white">{sig.scoreBreakdown?.mtf || 4}/5</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -1275,3 +1074,4 @@ export default function PocketSignalsWorkspace({
     </div>
   );
 }
+

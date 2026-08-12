@@ -1,0 +1,16 @@
+{
+  "max_concurrent_trades": 3,
+  "max_daily_drawdown_pct": 0.05,
+  "max_spread_pct": 0.001,
+  "default_risk_pct": 0.031,
+  "default_trade_amount": 100,
+  "autoTrade": {
+    "sl_threshold_pct": 0.02,
+    "min_profit_threshold": 0.75,
+    "trade_capital_alloc": 1000,
+    "active": false,
+    "max_daily_loss": 500,
+    "tp_threshold_pct": 0.06
+  },
+  "risk": 1
+}

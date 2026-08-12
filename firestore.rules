@@ -18,6 +18,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Signals Dataset Rules
+    match /signals/{signalId} {
+      // Allow read access for real-time training analytics
+      allow read: if true;
+
+      // Ensure creation payload strictly conforms to the generated signal state
+      allow create: if request.resource.data.keys().hasAll(['signal_id', 'symbol', 'timeframe', 'direction', 'entry', 'timestamp', 'market_regime', 'signal_score', 'outcome', 'created_at'])
+                   && request.resource.data.signal_id is string
+                   && request.resource.data.symbol is string
+                   && request.resource.data.outcome == 'UNRESOLVED';
+
+      // Ensure resolution modifications can only alter status and resolved_at fields chronologically
+      allow update: if request.resource.data.outcome in ['WIN', 'LOSS', 'EXPIRED', 'INVALIDATED', 'UNRESOLVED']
+                   && request.resource.data.signal_id == resource.data.signal_id
+                   && request.resource.data.symbol == resource.data.symbol
+                   && request.resource.data.timeframe == resource.data.timeframe
+                   && request.resource.data.direction == resource.data.direction
+                   && request.resource.data.entry == resource.data.entry;
+
+      allow delete: if false;
+    }
+
     // Default fallback rules
     match /{document=**} {
       allow read, write: if request.auth != null;

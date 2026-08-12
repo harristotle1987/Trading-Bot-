@@ -78,35 +78,10 @@ export async function fetch500OHLCVCandles(symbol: string, timeframe: string): P
     }
   }
 
-  // If external fetch didn't return 500 candles, generate realistic synthetic 500 bars seeded by symbol
-  if (candles.length < 500) {
-    let basePrice = candles.length > 0 ? candles[candles.length - 1].close : (marketDataService.getPrices()[cleanSymbol] || 100);
-
-    const now = Date.now();
-    const timeframeMs = timeframe === '1h' ? 3600000 : timeframe === '4h' ? 14400000 : timeframe === '1d' ? 86400000 : 900000;
-    let currPrice = basePrice;
-    
-    // Seeded random sequence
-    let seed = 0;
-    for (let i = 0; i < cleanSymbol.length; i++) seed += cleanSymbol.charCodeAt(i);
-
-    const generated: Candle[] = [];
-    for (let i = 500; i >= 1; i--) {
-      const time = now - i * timeframeMs;
-      const pseudoRand1 = Math.sin(i * 0.17 + seed) * 10000 % 1;
-      const pseudoRand2 = Math.cos(i * 0.23 + seed) * 10000 % 1;
-      const pctChange = (pseudoRand1 - 0.49) * 0.012; // -0.6% to +0.6% volatility
-      
-      const open = currPrice;
-      const close = Math.max(open * 0.01, open * (1 + pctChange));
-      const high = Math.max(open, close) * (1 + Math.abs(pseudoRand2) * 0.005);
-      const low = Math.min(open, close) * (1 - Math.abs(pseudoRand1) * 0.005);
-      const volume = Math.floor(500 + Math.abs(pseudoRand1) * 3000);
-
-      generated.push({ time, open, high, low, close, volume });
-      currPrice = close;
-    }
-    candles = generated;
+  // P0-2: Remove synthetic market data generation. Return candles as-is or throw if insufficient real data.
+  if (candles.length < 20) {
+    console.warn(`[StrategySweep] Real market candles unavailable for ${symbol} [${timeframe}] (got ${candles.length} bars). Returning empty array.`);
+    return [];
   }
 
   return candles;
@@ -562,6 +537,9 @@ export async function executeStrategySweep(symbol: string, timeframe: string): P
   setTimeout(async () => {
     try {
       const candles = await fetch500OHLCVCandles(symbol, timeframe);
+      if (candles.length < 20) {
+        throw new Error(`MARKET_DATA_UNAVAILABLE: Insufficient real historical candles for ${symbol} [${timeframe}]`);
+      }
 
       // Run all 5 strategy simulations simultaneously
       const swingMetric = simulateSwingTrading(candles);

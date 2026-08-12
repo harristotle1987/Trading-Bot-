@@ -17,8 +17,8 @@ export default function RiskDashboard() {
     const interval = setInterval(() => {
       setMetrics(prev => ({
         ...prev,
-        totalExposure: Math.random() * 15000,
-        dailyPnL: (Math.random() - 0.5) * 500,
+        totalExposure: 0, // Should be fetched from real backend
+        dailyPnL: 0, // Should be fetched from real backend
       }));
     }, 2000);
     return () => clearInterval(interval);

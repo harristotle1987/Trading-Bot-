@@ -96,3 +96,25 @@ The Obsidian Trading System V2 is a quantitative trading signal platform designe
 2. **Signal Scanning / Confluence**: The server evaluates live candle series against strategy rules (SMC, Trend, Mean Reversion) and outputs setup metrics.
 3. **User Execution**: The user reviews signals on the frontend dashboard and manually executes trades on external brokers (Pocket Option, MT4/5, etc.).
 4. **Trade Lifecycle Tracking**: Executed trades are registered via `/api/trades/execute`, stored in Firestore, monitored for win/loss resolution, and logged in `/api/trades/closed`.
+
+---
+
+## 4. Signal Engine Unification & Legacy Deprecation (V2 Cleanup Gate)
+
+To guarantee production integrity and strict quantitative alignment:
+
+1. **Authoritative Engine**: `UnifiedSignalEngine` (`/src/utils/unifiedSignalEngine.ts`) is the single authoritative source for signal generation.
+2. **Deprecation of Legacy Heuristics**: Legacy heuristic generators, synthetic candle generators, and paper seeders (`seedHistoricalPaperSignals`) have been fully deprecated and removed.
+3. **Real Data Dependency**: All signal generation paths require real OHLCV candle arrays. Fallbacks to synthetic candle arrays or hard-coded probability values (`0.50`) are prohibited and throw explicit error responses (`503 MARKET_DATA_UNAVAILABLE` or `400 REAL_HISTORICAL_DATA_UNAVAILABLE`).
+4. **ML Model Status Differentiation**: `MLPipeline` (`/src/utils/mlEngine.ts`) distinguishes between active ML inference (`MODEL_READY`) and unavailable models (`UNAVAILABLE`). When no model is deployed, `mlProbability` returns `null` rather than a simulated 0.50 score.
+
+---
+
+## 5. Service Responsibilities: Node.js vs. Python ML Microservice
+
+| Layer | Technology | Primary Responsibilities | Prohibited Actions |
+|---|---|---|---|
+| **Core Platform Server** | Node.js (Express / TypeScript) | Market data ingress, REST API routing, `UnifiedSignalEngine` evaluation, risk rule enforcement, Firestore persistence, Pusher WebSocket broadcasts | Automated trade execution on live broker accounts; synthetic data fabrication |
+| **Quantitative Feature Engine** | TypeScript (`featureEngine.ts`) | Extracting standardized 11-feature ML feature vectors from raw candle series for model input and telemetry | Modifying model weights; returning arbitrary probabilities without features |
+| **ML Inference Service** | Python (FastAPI / PyTorch / LightGBM) | Off-line training, hyperparameter optimization, model artifact hosting, serving real-time setup probability predictions given feature vectors | Storing user state; handling REST authentication; directly placing broker trades |
+
